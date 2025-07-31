@@ -1,0 +1,81 @@
+import { 
+  collection, 
+  addDoc, 
+  query, 
+  where, 
+  orderBy, 
+  onSnapshot, 
+  serverTimestamp,
+  Timestamp 
+} from 'firebase/firestore'
+import { db } from '../config/firebase'
+
+export interface Message {
+  id: string
+  content: string
+  authorId: string
+  authorName: string
+  serverId: string
+  channelId: string
+  timestamp: Date
+  edited?: boolean
+  editedAt?: Date
+}
+
+export const messageService = {
+  async sendMessage(
+    content: string, 
+    authorId: string, 
+    authorName: string, 
+    serverId: string, 
+    channelId: string
+  ): Promise<void> {
+    try {
+      await addDoc(collection(db, 'messages'), {
+        content,
+        authorId,
+        authorName,
+        serverId,
+        channelId,
+        timestamp: serverTimestamp(),
+        edited: false
+      })
+    } catch (error: any) {
+      throw new Error(error.message)
+    }
+  },
+
+  subscribeToMessages(
+    serverId: string, 
+    channelId: string, 
+    callback: (messages: Message[]) => void
+  ): () => void {
+    const q = query(
+      collection(db, 'messages'),
+      where('serverId', '==', serverId),
+      where('channelId', '==', channelId),
+      orderBy('timestamp', 'asc')
+    )
+
+    return onSnapshot(q, (querySnapshot) => {
+      const messages: Message[] = []
+      
+      querySnapshot.forEach((doc) => {
+        const data = doc.data()
+        messages.push({
+          id: doc.id,
+          content: data.content,
+          authorId: data.authorId,
+          authorName: data.authorName,
+          serverId: data.serverId,
+          channelId: data.channelId,
+          timestamp: data.timestamp ? (data.timestamp as Timestamp).toDate() : new Date(),
+          edited: data.edited,
+          editedAt: data.editedAt ? (data.editedAt as Timestamp).toDate() : undefined
+        })
+      })
+      
+      callback(messages)
+    })
+  }
+}
