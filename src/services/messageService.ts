@@ -6,7 +6,11 @@ import {
   orderBy, 
   onSnapshot, 
   serverTimestamp,
-  Timestamp 
+  Timestamp,
+  doc,
+  updateDoc,
+  deleteDoc,
+  getDoc
 } from 'firebase/firestore'
 import { db } from '../config/firebase'
 
@@ -15,7 +19,7 @@ export interface Message {
   content: string
   authorId: string
   authorName: string
-  authorAvatarUrl?: string //Nueva Linea
+  authorAvatarUrl?: string
   serverId: string
   channelId: string
   timestamp: Date
@@ -28,7 +32,7 @@ export const messageService = {
     content: string, 
     authorId: string, 
     authorName: string,
-    authorAvatarUrl: string | null, //Nueva Linea
+    authorAvatarUrl: string | null,
     serverId: string, 
     channelId: string
   ): Promise<void> {
@@ -37,12 +41,58 @@ export const messageService = {
         content,
         authorId,
         authorName,
-        authorAvatarUrl, //Nueva Linea
+        authorAvatarUrl,
         serverId,
         channelId,
         timestamp: serverTimestamp(),
         edited: false
       })
+    } catch (error: any) {
+      throw new Error(error.message)
+    }
+  },
+
+  async editMessage(messageId: string, newContent: string, userId: string): Promise<void> {
+    try {
+      const messageRef = doc(db, 'messages', messageId)
+      const messageDoc = await getDoc(messageRef)
+      
+      if (!messageDoc.exists()) {
+        throw new Error('Message not found')
+      }
+
+      const messageData = messageDoc.data()
+      
+      if (messageData.authorId !== userId) {
+        throw new Error('You can only edit your own messages')
+      }
+
+      await updateDoc(messageRef, {
+        content: newContent,
+        edited: true,
+        editedAt: serverTimestamp()
+      })
+    } catch (error: any) {
+      throw new Error(error.message)
+    }
+  },
+
+  async deleteMessage(messageId: string, userId: string, canManageMessages: boolean = false): Promise<void> {
+    try {
+      const messageRef = doc(db, 'messages', messageId)
+      const messageDoc = await getDoc(messageRef)
+      
+      if (!messageDoc.exists()) {
+        throw new Error('Message not found')
+      }
+
+      const messageData = messageDoc.data()
+      
+      if (messageData.authorId !== userId && !canManageMessages) {
+        throw new Error('You can only delete your own messages')
+      }
+
+      await deleteDoc(messageRef)
     } catch (error: any) {
       throw new Error(error.message)
     }
@@ -70,7 +120,7 @@ export const messageService = {
           content: data.content,
           authorId: data.authorId,
           authorName: data.authorName,
-          authorAvatarUrl: data.authorAvatarUrl || undefined, //Linea Nueva
+          authorAvatarUrl: data.authorAvatarUrl || undefined,
           serverId: data.serverId,
           channelId: data.channelId,
           timestamp: data.timestamp ? (data.timestamp as Timestamp).toDate() : new Date(),

@@ -398,6 +398,8 @@ export default function Home() {
               onHideMobileNav={() => setShowMobileNav(false)}
               onToggleMemberList={handleToggleMemberList}
               onUserClick={handleUserClick}
+              currentUserId={currentUser?.uid || ''}
+              canManageMessages={hasPermission('manage_messages')}
             />
           </div>
         </div>
@@ -426,6 +428,8 @@ export default function Home() {
           serverName={activeServer.name}
           onToggleMemberList={handleToggleMemberList}
           onUserClick={handleUserClick}
+          currentUserId={currentUser?.uid || ''}
+          canManageMessages={hasPermission('manage_messages')}
         />
 
         {showMemberList && (
