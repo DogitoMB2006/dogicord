@@ -15,6 +15,7 @@ import {
 import { ref, uploadBytes, getDownloadURL, deleteObject, getStorage } from 'firebase/storage'
 import { db } from '../config/firebase'
 import type { Role } from '../types/permissions'
+import type { Channel, Category, ChannelPermission } from '../types/channels'
 import { DEFAULT_ROLES } from '../types/permissions'
 
 export interface Server {
@@ -25,17 +26,10 @@ export interface Server {
   inviteCode: string
   createdAt: Date
   channels: Channel[]
+  categories: Category[]
   roles: Role[]
   icon?: string
   displayRolesSeparately?: boolean
-}
-
-export interface Channel {
-  id: string
-  name: string
-  type: 'text' | 'voice'
-  category: string
-  createdAt: Date
 }
 
 export interface ServerMember {
@@ -51,26 +45,54 @@ export const serverService = {
       const serverId = `server_${Date.now()}`
       const inviteCode = Math.random().toString(36).substring(2, 8).toUpperCase()
       
+      const defaultCategories: Category[] = [
+        {
+          id: 'text-category',
+          name: 'Text Channels',
+          position: 0,
+          collapsed: false,
+          permissions: [],
+          createdAt: new Date()
+        },
+        {
+          id: 'voice-category', 
+          name: 'Voice Channels',
+          position: 1,
+          collapsed: false,
+          permissions: [],
+          createdAt: new Date()
+        }
+      ]
+
       const defaultChannels: Channel[] = [
         {
           id: 'general',
           name: 'general',
           type: 'text',
-          category: 'Text Channels',
+          categoryId: 'text-category',
+          description: 'General discussion',
+          position: 0,
+          permissions: [],
           createdAt: new Date()
         },
         {
           id: 'random',
           name: 'random', 
           type: 'text',
-          category: 'Text Channels',
+          categoryId: 'text-category',
+          description: 'Random conversations',
+          position: 1,
+          permissions: [],
           createdAt: new Date()
         },
         {
           id: 'general-voice',
           name: 'General',
           type: 'voice',
-          category: 'Voice Channels',
+          categoryId: 'voice-category',
+          description: 'General voice chat',
+          position: 0,
+          permissions: [],
           createdAt: new Date()
         }
       ]
@@ -104,6 +126,7 @@ export const serverService = {
         inviteCode,
         createdAt: new Date(),
         channels: defaultChannels,
+        categories: defaultCategories,
         roles: defaultRoles,
         displayRolesSeparately: true
       }
@@ -469,6 +492,150 @@ export const serverService = {
       
       await updateDoc(memberDocRef, {
         roles: updatedRoles
+      })
+    } catch (error: any) {
+      throw new Error(error.message)
+    }
+  },
+
+  async createChannelWithPermissions(serverId: string, name: string, type: 'text' | 'voice', categoryId: string, permissions: ChannelPermission[]): Promise<void> {
+    try {
+      const serverRef = doc(db, 'servers', serverId)
+      const serverDoc = await getDoc(serverRef)
+      
+      if (!serverDoc.exists()) {
+        throw new Error('Server not found')
+      }
+
+      const server = serverDoc.data() as Server
+      const maxPosition = Math.max(...server.channels.filter(ch => ch.categoryId === categoryId).map(ch => ch.position), -1)
+      
+      const newChannel: Channel = {
+        id: `${type}_${Date.now()}`,
+        name: name.toLowerCase().replace(/[^a-z0-9-]/g, '-'),
+        type,
+        categoryId,
+        description: undefined,
+        position: maxPosition + 1,
+        permissions,
+        createdAt: new Date()
+      }
+
+      await updateDoc(serverRef, {
+        channels: [...server.channels, newChannel]
+      })
+    } catch (error: any) {
+      throw new Error(error.message)
+    }
+  },
+
+  async updateChannelWithPermissions(serverId: string, channelId: string, updates: Partial<Channel>): Promise<void> {
+    try {
+      const serverRef = doc(db, 'servers', serverId)
+      const serverDoc = await getDoc(serverRef)
+      
+      if (!serverDoc.exists()) {
+        throw new Error('Server not found')
+      }
+
+      const server = serverDoc.data() as Server
+      const updatedChannels = server.channels.map(channel => 
+        channel.id === channelId ? { ...channel, ...updates } : channel
+      )
+
+      await updateDoc(serverRef, {
+        channels: updatedChannels
+      })
+    } catch (error: any) {
+      throw new Error(error.message)
+    }
+  },
+
+  async createCategory(serverId: string, name: string, permissions: ChannelPermission[]): Promise<void> {
+    try {
+      const serverRef = doc(db, 'servers', serverId)
+      const serverDoc = await getDoc(serverRef)
+      
+      if (!serverDoc.exists()) {
+        throw new Error('Server not found')
+      }
+
+      const server = serverDoc.data() as Server
+      const maxPosition = Math.max(...server.categories.map(cat => cat.position), -1)
+      
+      const newCategory: Category = {
+        id: `category_${Date.now()}`,
+        name,
+        position: maxPosition + 1,
+        collapsed: false,
+        permissions,
+        createdAt: new Date()
+      }
+
+      await updateDoc(serverRef, {
+        categories: [...server.categories, newCategory]
+      })
+    } catch (error: any) {
+      throw new Error(error.message)
+    }
+  },
+
+  async updateCategory(serverId: string, categoryId: string, updates: Partial<Category>): Promise<void> {
+    try {
+      const serverRef = doc(db, 'servers', serverId)
+      const serverDoc = await getDoc(serverRef)
+      
+      if (!serverDoc.exists()) {
+        throw new Error('Server not found')
+      }
+
+      const server = serverDoc.data() as Server
+      const updatedCategories = server.categories.map(category => 
+        category.id === categoryId ? { ...category, ...updates } : category
+      )
+
+      await updateDoc(serverRef, {
+        categories: updatedCategories
+      })
+    } catch (error: any) {
+      throw new Error(error.message)
+    }
+  },
+
+  async deleteCategory(serverId: string, categoryId: string): Promise<void> {
+    try {
+      const serverRef = doc(db, 'servers', serverId)
+      const serverDoc = await getDoc(serverRef)
+      
+      if (!serverDoc.exists()) {
+        throw new Error('Server not found')
+      }
+
+      const server = serverDoc.data() as Server
+      
+      // Remove category
+      const updatedCategories = server.categories.filter(cat => cat.id !== categoryId)
+      
+      // Move channels to uncategorized
+      const updatedChannels = server.channels.map(channel => 
+        channel.categoryId === categoryId ? { ...channel, categoryId: '' } : channel
+      )
+
+      await updateDoc(serverRef, {
+        categories: updatedCategories,
+        channels: updatedChannels
+      })
+    } catch (error: any) {
+      throw new Error(error.message)
+    }
+  },
+
+  async reorderChannelsAndCategories(serverId: string, channels: Channel[], categories: Category[]): Promise<void> {
+    try {
+      const serverRef = doc(db, 'servers', serverId)
+      await updateDoc(serverRef, {
+        channels,
+        categories
       })
     } catch (error: any) {
       throw new Error(error.message)
