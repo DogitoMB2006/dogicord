@@ -402,7 +402,8 @@ export default function Home() {
   const serverList = servers.map(server => ({
     id: server.id,
     name: server.name,
-    initial: server.name.charAt(0).toUpperCase()
+    initial: server.name.charAt(0).toUpperCase(),
+    icon: server.icon
   }))
 
   return (

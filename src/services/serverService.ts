@@ -11,6 +11,7 @@ import {
   orderBy,
   serverTimestamp
 } from 'firebase/firestore'
+import { ref, uploadBytes, getDownloadURL, deleteObject, getStorage } from 'firebase/storage'
 import { db } from '../config/firebase'
 import type { Role } from '../types/permissions'
 import { DEFAULT_ROLES } from '../types/permissions'
@@ -128,6 +129,32 @@ export const serverService = {
       await updateDoc(serverRef, updates)
     } catch (error: any) {
       throw new Error(error.message)
+    }
+  },
+
+  async uploadServerIcon(file: File, serverId: string): Promise<string> {
+    try {
+      const storage = getStorage()
+      const fileExtension = file.name.split('.').pop()
+      const fileName = `${serverId}_${Date.now()}.${fileExtension}`
+      const iconRef = ref(storage, `serverIcons/${fileName}`)
+      
+      const snapshot = await uploadBytes(iconRef, file)
+      const downloadURL = await getDownloadURL(snapshot.ref)
+      
+      return downloadURL
+    } catch (error: any) {
+      throw new Error('Failed to upload server icon: ' + error.message)
+    }
+  },
+
+  async deleteServerIcon(iconUrl: string): Promise<void> {
+    try {
+      const storage = getStorage()
+      const iconRef = ref(storage, iconUrl)
+      await deleteObject(iconRef)
+    } catch (error: any) {
+      console.warn('Failed to delete old server icon:', error.message)
     }
   },
 

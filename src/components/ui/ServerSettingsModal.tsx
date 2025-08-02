@@ -1,6 +1,7 @@
-import { useState } from 'react'
+import { useState, useRef } from 'react'
 import type { Server } from '../../services/serverService'
 import type { Role } from '../../types/permissions'
+import { serverService } from '../../services/serverService'
 
 interface ServerSettingsModalProps {
   isOpen: boolean
@@ -29,6 +30,10 @@ export default function ServerSettingsModal({
   const [newChannelType, setNewChannelType] = useState<'text' | 'voice'>('text')
   const [loading, setLoading] = useState(false)
   const [isMobile] = useState(window.innerWidth < 768)
+  const [selectedIcon, setSelectedIcon] = useState<File | null>(null)
+  const [previewUrl, setPreviewUrl] = useState<string | null>(null)
+  const [iconError, setIconError] = useState('')
+  const fileInputRef = useRef<HTMLInputElement>(null)
 
   if (!isOpen) return null
 
@@ -43,12 +48,87 @@ export default function ServerSettingsModal({
     if (serverName.trim() !== server.name && hasPermission('manage_server')) {
       setLoading(true)
       try {
-        await onUpdateServer({ name: serverName.trim() })
-      } catch (error) {
-        console.error('Failed to update server name:', error)
+        const updates: Partial<Server> = { name: serverName.trim() }
+        
+        if (selectedIcon) {
+          if (server.icon) {
+            await serverService.deleteServerIcon(server.icon)
+          }
+          
+          const iconUrl = await serverService.uploadServerIcon(selectedIcon, server.id)
+          updates.icon = iconUrl
+        }
+        
+        await onUpdateServer(updates)
+        setSelectedIcon(null)
+        setPreviewUrl(null)
+        setIconError('')
+        if (fileInputRef.current) {
+          fileInputRef.current.value = ''
+        }
+      } catch (error: any) {
+        setIconError(error.message)
       } finally {
         setLoading(false)
       }
+    }
+  }
+
+  const handleUpdateServerIcon = async () => {
+    if (selectedIcon && hasPermission('manage_server')) {
+      setLoading(true)
+      try {
+        if (server.icon) {
+          await serverService.deleteServerIcon(server.icon)
+        }
+        
+        const iconUrl = await serverService.uploadServerIcon(selectedIcon, server.id)
+        await onUpdateServer({ icon: iconUrl })
+        
+        setSelectedIcon(null)
+        setPreviewUrl(null)
+        setIconError('')
+        if (fileInputRef.current) {
+          fileInputRef.current.value = ''
+        }
+      } catch (error: any) {
+        setIconError(error.message)
+      } finally {
+        setLoading(false)
+      }
+    }
+  }
+
+  const handleIconSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+
+    if (file.size > 5 * 1024 * 1024) {
+      setIconError('Image must be less than 5MB')
+      return
+    }
+
+    if (!file.type.startsWith('image/')) {
+      setIconError('File must be an image')
+      return
+    }
+
+    setSelectedIcon(file)
+    setIconError('')
+    
+    const reader = new FileReader()
+    reader.onload = (e) => {
+      setPreviewUrl(e.target?.result as string)
+    }
+    reader.readAsDataURL(file)
+  }
+
+  const handleRemoveIcon = () => {
+    setSelectedIcon(null)
+    setPreviewUrl(null)
+    setIconError('')
+    if (fileInputRef.current) {
+      fileInputRef.current.value = ''
     }
   }
 
@@ -103,7 +183,7 @@ export default function ServerSettingsModal({
               />
               <button
                 onClick={handleUpdateServerName}
-                disabled={serverName.trim() === server.name || !hasPermission('manage_server') || loading}
+                disabled={serverName.trim() === server.name && !selectedIcon || !hasPermission('manage_server') || loading}
                 className="px-4 py-2 bg-green-600 hover:bg-green-700 disabled:bg-gray-600 disabled:cursor-not-allowed text-white rounded-lg transition-colors text-sm md:text-base"
               >
                 {loading ? 'Saving...' : 'Save'}
@@ -116,21 +196,61 @@ export default function ServerSettingsModal({
               SERVER ICON
             </label>
             <div className="flex items-center space-x-4">
-              <div className={`${isMobile ? 'w-16 h-16' : 'w-20 h-20'} bg-slate-600 rounded-2xl flex items-center justify-center`}>
-                <span className={`${isMobile ? 'text-xl' : 'text-2xl'} font-bold text-white`}>
-                  {server.name.charAt(0).toUpperCase()}
-                </span>
+              <div className={`${isMobile ? 'w-16 h-16' : 'w-20 h-20'} bg-slate-600 rounded-2xl flex items-center justify-center overflow-hidden relative`}>
+                {previewUrl || server.icon ? (
+                  <img 
+                    src={previewUrl || server.icon} 
+                    alt="Server Icon" 
+                    className="w-full h-full object-cover"
+                  />
+                ) : (
+                  <span className={`${isMobile ? 'text-xl' : 'text-2xl'} font-bold text-white`}>
+                    {server.name.charAt(0).toUpperCase()}
+                  </span>
+                )}
               </div>
-              <button
-                disabled={!hasPermission('manage_server')}
-                className="px-3 py-2 md:px-4 md:py-2 bg-slate-600 hover:bg-slate-700 disabled:bg-gray-600 disabled:cursor-not-allowed text-white rounded-lg transition-colors text-sm md:text-base"
-              >
-                Upload Image
-              </button>
+              <div className="flex flex-col space-y-2">
+                <button
+                  onClick={() => fileInputRef.current?.click()}
+                  disabled={!hasPermission('manage_server') || loading}
+                  className="px-3 py-2 md:px-4 md:py-2 bg-slate-600 hover:bg-slate-700 disabled:bg-gray-600 disabled:cursor-not-allowed text-white rounded-lg transition-colors text-sm md:text-base"
+                >
+                  Upload Image
+                </button>
+                {selectedIcon && (
+                  <div className="flex space-x-2">
+                    <button
+                      onClick={handleUpdateServerIcon}
+                      disabled={loading}
+                      className="px-3 py-1 bg-green-600 hover:bg-green-700 disabled:bg-gray-600 text-white rounded text-xs"
+                    >
+                      Save Icon
+                    </button>
+                    <button
+                      onClick={handleRemoveIcon}
+                      disabled={loading}
+                      className="px-3 py-1 bg-red-600 hover:bg-red-700 disabled:bg-gray-600 text-white rounded text-xs"
+                    >
+                      Remove
+                    </button>
+                  </div>
+                )}
+              </div>
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept="image/*"
+                onChange={handleIconSelect}
+                disabled={loading}
+                className="hidden"
+              />
             </div>
             <p className="text-xs text-gray-400 mt-2">
-              Recommended size: 512x512px
+              Recommended size: 512x512px, max 5MB
             </p>
+            {iconError && (
+              <p className="text-xs text-red-400 mt-1">{iconError}</p>
+            )}
           </div>
 
           <div>

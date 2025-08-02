@@ -2,6 +2,7 @@ interface Server {
   id: string
   name: string
   initial: string
+  icon?: string
 }
 
 interface ServerSidebarProps {
@@ -38,20 +39,28 @@ export default function ServerSidebar({
             <p className="text-center text-gray-400 text-xs mt-2">Dogicord</p>
           </div>
 
-          <div className="grid grid-cols-3 gap-4">
+            <div className="grid grid-cols-3 gap-4">
             {servers.map((server) => (
               <div key={server.id} className="relative flex flex-col items-center">
                 <div
                   onClick={() => onServerSelect(server.id)}
-                  className={`w-16 h-16 rounded-2xl hover:rounded-xl transition-all duration-200 flex items-center justify-center cursor-pointer group ${
+                  className={`w-16 h-16 rounded-2xl hover:rounded-xl transition-all duration-200 flex items-center justify-center cursor-pointer group overflow-hidden ${
                     activeServerId === server.id
                       ? 'bg-slate-600 rounded-xl ring-2 ring-slate-500'
                       : 'bg-gray-700 hover:bg-slate-600'
                   }`}
                 >
-                  <span className="text-white font-bold text-lg">
-                    {getServerInitial(server.name)}
-                  </span>
+                  {servers.find(s => s.id === server.id)?.icon ? (
+                    <img 
+                      src={servers.find(s => s.id === server.id)?.icon} 
+                      alt={server.name}
+                      className="w-full h-full object-cover"
+                    />
+                  ) : (
+                    <span className="text-white font-bold text-lg">
+                      {getServerInitial(server.name)}
+                    </span>
+                  )}
                 </div>
                 <p className="text-center text-gray-400 text-xs mt-1 truncate w-full">
                   {server.name}
@@ -89,15 +98,23 @@ export default function ServerSidebar({
           <div key={server.id} className="relative">
             <div
               onClick={() => onServerSelect(server.id)}
-              className={`w-12 h-12 rounded-2xl hover:rounded-xl transition-all duration-200 flex items-center justify-center cursor-pointer group ${
+              className={`w-12 h-12 rounded-2xl hover:rounded-xl transition-all duration-200 flex items-center justify-center cursor-pointer group overflow-hidden ${
                 activeServerId === server.id
                   ? 'bg-slate-600 rounded-xl'
                   : 'bg-gray-700 hover:bg-slate-600'
               }`}
             >
-              <span className="text-white font-bold text-lg">
-                {getServerInitial(server.name)}
-              </span>
+              {servers.find(s => s.id === server.id)?.icon ? (
+                <img 
+                  src={servers.find(s => s.id === server.id)?.icon} 
+                  alt={server.name}
+                  className="w-full h-full object-cover"
+                />
+              ) : (
+                <span className="text-white font-bold text-lg">
+                  {getServerInitial(server.name)}
+                </span>
+              )}
             </div>
             
             {activeServerId === server.id && (
