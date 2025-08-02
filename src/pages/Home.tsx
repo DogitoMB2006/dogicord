@@ -48,7 +48,10 @@ export default function Home() {
   const [mobileView, setMobileView] = useState<MobileView>('chat')
   const [isMobile, setIsMobile] = useState(false)
   const [showMobileNav, setShowMobileNav] = useState(true)
-  const [showMemberList, setShowMemberList] = useState(false)
+  const [showMemberList, setShowMemberList] = useState(() => {
+    const saved = localStorage.getItem('dogicord-memberlist-open')
+    return saved === 'true'
+  })
   const [showMobileMemberList, setShowMobileMemberList] = useState(false)
 
   useEffect(() => {
@@ -234,7 +237,9 @@ export default function Home() {
     if (isMobile) {
       setShowMobileMemberList(!showMobileMemberList)
     } else {
-      setShowMemberList(!showMemberList)
+      const newState = !showMemberList
+      setShowMemberList(newState)
+      localStorage.setItem('dogicord-memberlist-open', newState.toString())
     }
   }
 
@@ -414,7 +419,10 @@ export default function Home() {
             serverId={activeServerId!}
             serverMembers={activeServer.members}
             isOpen={showMemberList}
-            onClose={() => setShowMemberList(false)}
+            onClose={() => {
+              setShowMemberList(false)
+              localStorage.setItem('dogicord-memberlist-open', 'false')
+            }}
             isMobile={false}
           />
         )}
