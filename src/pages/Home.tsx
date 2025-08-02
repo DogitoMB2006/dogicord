@@ -188,34 +188,6 @@ export default function Home() {
     }
   }
 
-  const handleCreateChannel = async (name: string, type: 'text' | 'voice') => {
-    if (!activeServerId) return
-    
-    try {
-      await serverService.createChannel(activeServerId, name, type)
-      await refreshServers()
-    } catch (error) {
-      console.error('Failed to create channel:', error)
-      throw error
-    }
-  }
-
-  const handleDeleteChannel = async (channelId: string) => {
-    if (!activeServerId) return
-    
-    try {
-      await serverService.deleteChannel(activeServerId, channelId)
-      await refreshServers()
-      
-      if (activeChannelId === channelId) {
-        setActiveChannelId('general')
-      }
-    } catch (error) {
-      console.error('Failed to delete channel:', error)
-      throw error
-    }
-  }
-
   const getChannelCategories = (): ChannelCategory[] => {
     if (!activeServer) return []
 
@@ -258,13 +230,10 @@ export default function Home() {
   }
 
   const handleRoleUpdate = async () => {
-    // Recargar roles del usuario actual
     if (activeServerId && currentUser) {
       await loadUserRoles()
     }
-    // Recargar servers para actualizar memberlist
     await refreshServers()
-    // Trigger refresh del MemberList
     setRefreshTrigger(prev => prev + 1)
   }
 
@@ -504,8 +473,6 @@ export default function Home() {
           server={activeServer}
           userRoles={userRoles}
           onUpdateServer={handleUpdateServer}
-          onCreateChannel={handleCreateChannel}
-          onDeleteChannel={handleDeleteChannel}
           currentUserId={currentUser?.uid || ''}
         />
       )}

@@ -2,8 +2,10 @@
 import { useState, useRef } from 'react'
 import type { Server } from '../../services/serverService'
 import type { Role } from '../../types/permissions'
+import type { Channel, Category, ChannelPermission } from '../../types/channels'
 import { serverService } from '../../services/serverService'
 import RoleManager from '../server/RoleManager'
+import ChannelManager from '../server/ChannelManager'
 
 interface ServerSettingsModalProps {
   isOpen: boolean
@@ -11,8 +13,6 @@ interface ServerSettingsModalProps {
   server: Server
   userRoles: Role[]
   onUpdateServer: (updates: Partial<Server>) => Promise<void>
-  onCreateChannel: (name: string, type: 'text' | 'voice') => Promise<void>
-  onDeleteChannel: (channelId: string) => Promise<void>
   currentUserId: string
 }
 
@@ -24,14 +24,10 @@ export default function ServerSettingsModal({
   server, 
   userRoles,
   onUpdateServer,
-  onCreateChannel,
-  onDeleteChannel,
   currentUserId
 }: ServerSettingsModalProps) {
   const [activeTab, setActiveTab] = useState<SettingsTab>('general')
   const [serverName, setServerName] = useState(server.name)
-  const [newChannelName, setNewChannelName] = useState('')
-  const [newChannelType, setNewChannelType] = useState<'text' | 'voice'>('text')
   const [loading, setLoading] = useState(false)
   const [isMobile] = useState(window.innerWidth < 768)
   const [selectedIcon, setSelectedIcon] = useState<File | null>(null)
@@ -140,29 +136,57 @@ export default function ServerSettingsModal({
     }
   }
 
-  const handleCreateChannel = async () => {
-    if (newChannelName.trim() && hasPermission('manage_channels')) {
-      setLoading(true)
-      try {
-        await onCreateChannel(newChannelName.trim(), newChannelType)
-        setNewChannelName('')
-      } catch (error) {
-        console.error('Failed to create channel:', error)
-      } finally {
-        setLoading(false)
-      }
+  const handleCreateChannelWithPermissions = async (name: string, type: 'text' | 'voice', categoryId: string, permissions: ChannelPermission[]) => {
+    try {
+      await serverService.createChannelWithPermissions(server.id, name, type, categoryId, permissions)
+      window.location.reload()
+    } catch (error: any) {
+      throw error
     }
   }
 
-  const handleDeleteChannel = async (channelId: string) => {
-    if (hasPermission('manage_channels')) {
-      if (confirm('Are you sure you want to delete this channel?')) {
-        try {
-          await onDeleteChannel(channelId)
-        } catch (error) {
-          console.error('Failed to delete channel:', error)
-        }
-      }
+  const handleUpdateChannel = async (channelId: string, updates: Partial<Channel>) => {
+    try {
+      await serverService.updateChannelWithPermissions(server.id, channelId, updates)
+      window.location.reload()
+    } catch (error: any) {
+      throw error
+    }
+  }
+
+  const handleDeleteChannelAdvanced = async (channelId: string) => {
+    try {
+      await serverService.deleteChannel(server.id, channelId)
+      window.location.reload()
+    } catch (error: any) {
+      throw error
+    }
+  }
+
+  const handleCreateCategory = async (name: string, permissions: ChannelPermission[]) => {
+    try {
+      await serverService.createCategory(server.id, name, permissions)
+      window.location.reload()
+    } catch (error: any) {
+      throw error
+    }
+  }
+
+  const handleUpdateCategory = async (categoryId: string, updates: Partial<Category>) => {
+    try {
+      await serverService.updateCategory(server.id, categoryId, updates)
+      window.location.reload()
+    } catch (error: any) {
+      throw error
+    }
+  }
+
+  const handleDeleteCategory = async (categoryId: string) => {
+    try {
+      await serverService.deleteCategory(server.id, categoryId)
+      window.location.reload()
+    } catch (error: any) {
+      throw error
     }
   }
 
@@ -335,80 +359,22 @@ export default function ServerSettingsModal({
   const renderChannelSettings = () => (
     <div className="space-y-4 md:space-y-6">
       <div>
-        <h3 className={`${isMobile ? 'text-lg' : 'text-lg'} font-semibold text-white mb-3 md:mb-4`}>Channels</h3>
+        <h3 className={`${isMobile ? 'text-lg' : 'text-lg'} font-semibold text-white mb-3 md:mb-4`}>Channel Management</h3>
         
-        {hasPermission('manage_channels') && (
-          <div className="mb-4 md:mb-6 p-3 md:p-4 bg-gray-750 rounded-lg">
-            <h4 className="text-white font-medium mb-3 text-sm md:text-base">Create Channel</h4>
-            <div className="space-y-3">
-              <input
-                type="text"
-                value={newChannelName}
-                onChange={(e) => setNewChannelName(e.target.value)}
-                placeholder="Channel name"
-                className="w-full px-3 py-2 md:px-4 md:py-2 bg-gray-700 border border-gray-600 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-slate-500 text-sm md:text-base"
-              />
-              <div className="flex flex-col md:flex-row space-y-2 md:space-y-0 md:space-x-4">
-                <label className="flex items-center">
-                  <input
-                    type="radio"
-                    name="channelType"
-                    value="text"
-                    checked={newChannelType === 'text'}
-                    onChange={(e) => setNewChannelType(e.target.value as 'text')}
-                    className="mr-2"
-                  />
-                  <span className="text-gray-300 text-sm md:text-base"># Text Channel</span>
-                </label>
-                <label className="flex items-center">
-                  <input
-                    type="radio"
-                    name="channelType"
-                    value="voice"
-                    checked={newChannelType === 'voice'}
-                    onChange={(e) => setNewChannelType(e.target.value as 'voice')}
-                    className="mr-2"
-                  />
-                  <span className="text-gray-300 text-sm md:text-base">🔊 Voice Channel</span>
-                </label>
-              </div>
-              <button
-                onClick={handleCreateChannel}
-                disabled={!newChannelName.trim() || loading}
-                className="w-full md:w-auto px-4 py-2 bg-green-600 hover:bg-green-700 disabled:bg-gray-600 disabled:cursor-not-allowed text-white rounded-lg transition-colors text-sm md:text-base"
-              >
-                {loading ? 'Creating...' : 'Create Channel'}
-              </button>
-            </div>
-          </div>
-        )}
-
-        <div className="space-y-2">
-          {server.channels.map((channel) => (
-            <div key={channel.id} className="flex items-center justify-between p-3 bg-gray-750 rounded-lg">
-              <div className="flex items-center space-x-3 flex-1 min-w-0">
-                <span className="text-gray-400 flex-shrink-0">
-                  {channel.type === 'text' ? '#' : '🔊'}
-                </span>
-                <span className="text-white truncate text-sm md:text-base">{channel.name}</span>
-                <span className="text-xs text-gray-500 uppercase flex-shrink-0">
-                  {channel.type}
-                </span>
-              </div>
-              
-              {hasPermission('manage_channels') && channel.name !== 'general' && (
-                <button
-                  onClick={() => handleDeleteChannel(channel.id)}
-                  className="p-1 md:p-2 text-gray-400 hover:text-red-400 transition-colors flex-shrink-0 ml-2"
-                >
-                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                  </svg>
-                </button>
-              )}
-            </div>
-          ))}
-        </div>
+        <ChannelManager
+          channels={server.channels}
+          categories={server.categories}
+          roles={server.roles}
+          userRoles={userRoles}
+          isOwner={isOwner}
+          onCreateChannel={handleCreateChannelWithPermissions}
+          onUpdateChannel={handleUpdateChannel}
+          onDeleteChannel={handleDeleteChannelAdvanced}
+          onCreateCategory={handleCreateCategory}
+          onUpdateCategory={handleUpdateCategory}
+          onDeleteCategory={handleDeleteCategory}
+          isMobile={isMobile}
+        />
       </div>
     </div>
   )

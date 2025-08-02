@@ -2,14 +2,15 @@
 import { useState } from 'react'
 import type { Category, ChannelPermission, ChannelPermissionType } from '../../types/channels'
 import type { Role } from '../../types/permissions'
-import { CHANNEL_PERMISSIONS } from '../../types/channels'
+import { CHANNEL_PERMISSION_INFO } from '../../types/channels'
 
 interface CategoryEditorProps {
   category: Category | null
   roles: Role[]
   userRoles: Role[]
   isOwner: boolean
-  onSave: (nameOrUpdates: string | Partial<Category>, permissions?: ChannelPermission[]) => Promise<void>
+  onSave: (updates: Partial<Category>) => Promise<void>
+  onCreate: (name: string, permissions: ChannelPermission[]) => Promise<void>
   onCancel: () => void
   onDelete?: () => Promise<void>
   isMobile: boolean
@@ -21,6 +22,7 @@ export default function CategoryEditor({
   userRoles,
   isOwner,
   onSave,
+  onCreate,
   onCancel,
   onDelete,
   isMobile
@@ -62,7 +64,7 @@ export default function CategoryEditor({
         }
         await onSave(updates)
       } else {
-        await onSave(name.trim(), permissions)
+        await onCreate(name.trim(), permissions)
       }
     } catch (err: any) {
       setError(err.message)
@@ -132,20 +134,7 @@ export default function CategoryEditor({
     return 'inherit'
   }
 
-  const getPermissionDescription = (permission: ChannelPermissionType): string => {
-    const descriptions: Record<ChannelPermissionType, string> = {
-      view_channel: 'Allows members to view channels in this category',
-      send_messages: 'Allows members to send messages in text channels',
-      manage_messages: 'Allows members to delete messages by other members',
-      read_message_history: 'Allows members to read messages sent before they joined',
-      use_voice_activity: 'Allows members to use voice activation in voice channels',
-      speak: 'Allows members to speak in voice channels',
-      mute_members: 'Allows members to mute other members in voice channels',
-      deafen_members: 'Allows members to deafen other members in voice channels',
-      move_members: 'Allows members to move other members between voice channels'
-    }
-    return descriptions[permission]
-  }
+
 
   return (
     <div className="space-y-6">
@@ -209,47 +198,51 @@ export default function CategoryEditor({
                   </div>
 
                   <div className="space-y-2">
-                    {CHANNEL_PERMISSIONS.map((permission) => {
-                      const currentState = getRolePermission(role.id, permission)
+                    {CHANNEL_PERMISSION_INFO.map((permInfo) => {
+                      const currentState = getRolePermission(role.id, permInfo.id)
+                      const canEdit = hasPermission('manage_channels')
                       
                       return (
-                        <div key={permission} className="flex items-center justify-between">
+                        <div key={permInfo.id} className="flex items-center justify-between">
                           <div className="flex-1 min-w-0">
                             <p className={`text-white font-medium ${isMobile ? 'text-sm' : 'text-base'}`}>
-                              {permission.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())}
+                              {permInfo.name}
                             </p>
                             <p className={`text-gray-400 ${isMobile ? 'text-xs' : 'text-sm'}`}>
-                              {getPermissionDescription(permission)}
+                              {permInfo.description}
                             </p>
                           </div>
 
                           <div className="flex space-x-1">
                             <button
-                              onClick={() => updateRolePermission(role.id, permission, 'allow')}
+                              onClick={() => updateRolePermission(role.id, permInfo.id, 'allow')}
+                              disabled={!canEdit}
                               className={`px-2 py-1 rounded text-xs transition-colors ${
                                 currentState === 'allow'
                                   ? 'bg-green-600 text-white'
-                                  : 'bg-gray-700 text-gray-300 hover:bg-green-600'
+                                  : 'bg-gray-700 text-gray-300 hover:bg-green-600 disabled:opacity-50'
                               }`}
                             >
                               ✓
                             </button>
                             <button
-                              onClick={() => updateRolePermission(role.id, permission, 'inherit')}
+                              onClick={() => updateRolePermission(role.id, permInfo.id, 'inherit')}
+                              disabled={!canEdit}
                               className={`px-2 py-1 rounded text-xs transition-colors ${
                                 currentState === 'inherit'
                                   ? 'bg-gray-600 text-white'
-                                  : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
+                                  : 'bg-gray-700 text-gray-300 hover:bg-gray-600 disabled:opacity-50'
                               }`}
                             >
                               /
                             </button>
                             <button
-                              onClick={() => updateRolePermission(role.id, permission, 'deny')}
+                              onClick={() => updateRolePermission(role.id, permInfo.id, 'deny')}
+                              disabled={!canEdit}
                               className={`px-2 py-1 rounded text-xs transition-colors ${
                                 currentState === 'deny'
                                   ? 'bg-red-600 text-white'
-                                  : 'bg-gray-700 text-gray-300 hover:bg-red-600'
+                                  : 'bg-gray-700 text-gray-300 hover:bg-red-600 disabled:opacity-50'
                               }`}
                             >
                               ✗

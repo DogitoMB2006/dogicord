@@ -1,4 +1,3 @@
-// src/components/server/RoleManager.tsx
 import { useState, useRef } from 'react'
 import type { Role } from '../../types/permissions'
 import RoleEditor from './RoleEditor'

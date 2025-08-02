@@ -1,4 +1,3 @@
-// src/components/server/RoleAssignment.tsx
 import { useState } from 'react'
 import type { Role } from '../../types/permissions'
 

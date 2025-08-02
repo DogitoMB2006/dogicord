@@ -198,7 +198,10 @@ export const serverService = {
         id: `${type}_${Date.now()}`,
         name: name.toLowerCase().replace(/[^a-z0-9-]/g, '-'),
         type,
-        category: type === 'text' ? 'Text Channels' : 'Voice Channels',
+        categoryId: type === 'text' ? 'text-category' : 'voice-category',
+        description: undefined,
+        position: server.channels.filter(ch => ch.type === type).length,
+        permissions: [],
         createdAt: new Date()
       }
 
@@ -613,10 +616,8 @@ export const serverService = {
 
       const server = serverDoc.data() as Server
       
-      // Remove category
       const updatedCategories = server.categories.filter(cat => cat.id !== categoryId)
       
-      // Move channels to uncategorized
       const updatedChannels = server.channels.map(channel => 
         channel.categoryId === categoryId ? { ...channel, categoryId: '' } : channel
       )

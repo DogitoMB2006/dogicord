@@ -1,5 +1,4 @@
-// src/components/server/ChannelManager.tsx
-import { useState, useRef } from 'react'
+import { useState } from 'react'
 import type { Channel, Category, ChannelPermission } from '../../types/channels'
 import type { Role } from '../../types/permissions'
 import ChannelEditor from './ChannelEditor'
@@ -17,7 +16,6 @@ interface ChannelManagerProps {
   onCreateCategory: (name: string, permissions: ChannelPermission[]) => Promise<void>
   onUpdateCategory: (categoryId: string, updates: Partial<Category>) => Promise<void>
   onDeleteCategory: (categoryId: string) => Promise<void>
-  onReorderChannels: (channels: Channel[], categories: Category[]) => Promise<void>
   isMobile: boolean
 }
 
@@ -33,7 +31,6 @@ export default function ChannelManager({
   onCreateCategory,
   onUpdateCategory,
   onDeleteCategory,
-  onReorderChannels,
   isMobile
 }: ChannelManagerProps) {
   const [editingChannel, setEditingChannel] = useState<Channel | null>(null)
@@ -41,8 +38,6 @@ export default function ChannelManager({
   const [showChannelForm, setShowChannelForm] = useState(false)
   const [showCategoryForm, setShowCategoryForm] = useState(false)
   const [selectedCategoryId, setSelectedCategoryId] = useState<string>('')
-  const [draggedItem, setDraggedItem] = useState<{ type: 'channel' | 'category', item: Channel | Category } | null>(null)
-  const [dragOverIndex, setDragOverIndex] = useState<number>(-1)
 
   const hasPermission = (permission: string): boolean => {
     if (isOwner) return true
@@ -65,27 +60,6 @@ export default function ChannelManager({
     .filter(ch => !categories.find(cat => cat.id === ch.categoryId))
     .sort((a, b) => a.position - b.position)
 
-  const handleDragStart = (e: React.DragEvent, type: 'channel' | 'category', item: Channel | Category) => {
-    if (!hasPermission('manage_channels')) return
-    setDraggedItem({ type, item })
-    e.dataTransfer.effectAllowed = 'move'
-  }
-
-  const handleDragOver = (e: React.DragEvent, index: number) => {
-    e.preventDefault()
-    if (!draggedItem) return
-    setDragOverIndex(index)
-  }
-
-  const handleDrop = async (e: React.DragEvent, dropIndex: number) => {
-    e.preventDefault()
-    if (!draggedItem || !hasPermission('manage_channels')) return
-
-    // Lógica de reordenamiento simplificada
-    setDraggedItem(null)
-    setDragOverIndex(-1)
-  }
-
   if (editingChannel) {
     return (
       <ChannelEditor
@@ -98,6 +72,7 @@ export default function ChannelManager({
           await onUpdateChannel(editingChannel.id, updates)
           setEditingChannel(null)
         }}
+        onCreate={async () => {}}
         onCancel={() => setEditingChannel(null)}
         onDelete={async () => {
           await onDeleteChannel(editingChannel.id)
@@ -119,6 +94,7 @@ export default function ChannelManager({
           await onUpdateCategory(editingCategory.id, updates)
           setEditingCategory(null)
         }}
+        onCreate={async () => {}}
         onCancel={() => setEditingCategory(null)}
         onDelete={async () => {
           await onDeleteCategory(editingCategory.id)
@@ -138,7 +114,8 @@ export default function ChannelManager({
         userRoles={userRoles}
         isOwner={isOwner}
         selectedCategoryId={selectedCategoryId}
-        onSave={async (name: string, type: 'text' | 'voice', categoryId: string, permissions: ChannelPermission[]) => {
+        onSave={async () => {}}
+        onCreate={async (name: string, type: 'text' | 'voice', categoryId: string, permissions: ChannelPermission[]) => {
           await onCreateChannel(name, type, categoryId, permissions)
           setShowChannelForm(false)
           setSelectedCategoryId('')
@@ -159,7 +136,8 @@ export default function ChannelManager({
         roles={roles}
         userRoles={userRoles}
         isOwner={isOwner}
-        onSave={async (name: string, permissions: ChannelPermission[]) => {
+        onSave={async () => {}}
+        onCreate={async (name: string, permissions: ChannelPermission[]) => {
           await onCreateCategory(name, permissions)
           setShowCategoryForm(false)
         }}
@@ -207,15 +185,9 @@ export default function ChannelManager({
       )}
 
       <div className="space-y-4">
-        {organizedChannels.map((group, categoryIndex) => (
+        {organizedChannels.map((group) => (
           <div key={group.category.id} className="space-y-2">
-            <div 
-              draggable={hasPermission('manage_channels')}
-              onDragStart={(e) => handleDragStart(e, 'category', group.category)}
-              className={`flex items-center justify-between p-2 bg-gray-750 rounded-lg border border-gray-600 ${
-                hasPermission('manage_channels') ? 'cursor-move hover:bg-gray-700' : 'cursor-default'
-              }`}
-            >
+            <div className="flex items-center justify-between p-2 bg-gray-750 rounded-lg border border-gray-600">
               <div className="flex items-center space-x-2">
                 <svg className="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
@@ -230,7 +202,10 @@ export default function ChannelManager({
 
               <div className="flex items-center space-x-2">
                 <button
-                  onClick={() => setSelectedCategoryId(group.category.id) || setShowChannelForm(true)}
+                  onClick={() => {
+                    setSelectedCategoryId(group.category.id)
+                    setShowChannelForm(true)
+                  }}
                   className="p-1 text-gray-400 hover:text-green-400 transition-colors"
                   title="Add channel to category"
                 >
@@ -253,14 +228,10 @@ export default function ChannelManager({
             </div>
 
             <div className="ml-4 space-y-1">
-              {group.channels.map((channel, channelIndex) => (
+              {group.channels.map((channel) => (
                 <div
                   key={channel.id}
-                  draggable={hasPermission('manage_channels')}
-                  onDragStart={(e) => handleDragStart(e, 'channel', channel)}
-                  className={`flex items-center justify-between p-2 bg-gray-700 rounded-lg border border-gray-600 ${
-                    hasPermission('manage_channels') ? 'cursor-move hover:bg-gray-650' : 'cursor-default'
-                  }`}
+                  className="flex items-center justify-between p-2 bg-gray-700 rounded-lg border border-gray-600"
                 >
                   <div className="flex items-center space-x-3">
                     <span className="text-gray-400">
