@@ -39,7 +39,9 @@ export default function Home() {
     refreshServers
   } = useServer()
   
-  const [activeChannelId, setActiveChannelId] = useState<string>('general')
+  const [activeChannelId, setActiveChannelId] = useState<string>(() => {
+    return localStorage.getItem('dogicord-active-channel') || 'general'
+  })
   const [isModalOpen, setIsModalOpen] = useState(false)
   const [isServerSettingsOpen, setIsServerSettingsOpen] = useState(false)
   const [isProfileModalOpen, setIsProfileModalOpen] = useState(false)
@@ -146,6 +148,7 @@ export default function Home() {
 
   const handleChannelSelect = (channelId: string) => {
     setActiveChannelId(channelId)
+    localStorage.setItem('dogicord-active-channel', channelId)
     if (isMobile) {
       setMobileView('chat')
       setShowMobileNav(false)
