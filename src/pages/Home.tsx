@@ -46,6 +46,7 @@ export default function Home() {
   const [userRoles, setUserRoles] = useState<Role[]>([])
   const [mobileView, setMobileView] = useState<MobileView>('chat')
   const [isMobile, setIsMobile] = useState(false)
+  const [showMobileNav, setShowMobileNav] = useState(true)
 
   useEffect(() => {
     const checkMobile = () => {
@@ -136,7 +137,10 @@ export default function Home() {
 
   const handleChannelSelect = (channelId: string) => {
     setActiveChannelId(channelId)
-    if (isMobile) setMobileView('chat')
+    if (isMobile) {
+      setMobileView('chat')
+      setShowMobileNav(false)
+    }
   }
 
   const handleSendMessage = async (content: string) => {
@@ -224,12 +228,15 @@ export default function Home() {
   }
 
   const renderMobileNavigation = () => {
-    if (!isMobile) return null
+    if (!isMobile || !showMobileNav) return null
 
     return (
-      <div className="md:hidden fixed bottom-0 left-0 right-0 bg-gray-900 border-t border-gray-700 flex z-40">
+      <div className="md:hidden fixed bottom-0 left-0 right-0 bg-gray-900 border-t border-gray-700 flex z-40 transition-transform duration-300">
         <button
-          onClick={() => setMobileView('servers')}
+          onClick={() => {
+            setMobileView('servers')
+            setShowMobileNav(true)
+          }}
           className={`flex-1 py-3 px-2 flex flex-col items-center ${
             mobileView === 'servers' ? 'text-white bg-gray-800' : 'text-gray-400'
           }`}
@@ -241,7 +248,10 @@ export default function Home() {
         </button>
         
         <button
-          onClick={() => setMobileView('channels')}
+          onClick={() => {
+            setMobileView('channels')
+            setShowMobileNav(true)
+          }}
           className={`flex-1 py-3 px-2 flex flex-col items-center ${
             mobileView === 'channels' ? 'text-white bg-gray-800' : 'text-gray-400'
           }`}
@@ -253,7 +263,10 @@ export default function Home() {
         </button>
         
         <button
-          onClick={() => setMobileView('chat')}
+          onClick={() => {
+            setMobileView('chat')
+            setShowMobileNav(false)
+          }}
           className={`flex-1 py-3 px-2 flex flex-col items-center ${
             mobileView === 'chat' ? 'text-white bg-gray-800' : 'text-gray-400'
           }`}
@@ -316,7 +329,7 @@ export default function Home() {
     
     if (isMobile) {
       return (
-        <div className="flex-1 flex flex-col pb-16">
+        <div className={`flex-1 flex flex-col ${showMobileNav ? 'pb-16' : 'pb-0'}`}>
           <div className={`${mobileView === 'servers' ? 'block' : 'hidden'} h-full`}>
             <ServerSidebar
               servers={serverList}
@@ -348,8 +361,13 @@ export default function Home() {
               messages={messages}
               onSendMessage={handleSendMessage}
               isMobile={true}
-              onBackToChannels={() => setMobileView('channels')}
+              onBackToChannels={() => {
+                setMobileView('channels')
+                setShowMobileNav(true)
+              }}
               serverName={activeServer.name}
+              onShowMobileNav={() => setShowMobileNav(true)}
+              onHideMobileNav={() => setShowMobileNav(false)}
             />
           </div>
         </div>

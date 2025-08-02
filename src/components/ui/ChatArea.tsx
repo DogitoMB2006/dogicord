@@ -8,6 +8,8 @@ interface ChatAreaProps {
   isMobile: boolean
   onBackToChannels?: () => void
   serverName: string
+  onShowMobileNav?: () => void
+  onHideMobileNav?: () => void
 }
 
 export default function ChatArea({ 
@@ -16,15 +18,39 @@ export default function ChatArea({
   onSendMessage, 
   isMobile, 
   onBackToChannels,
-  serverName 
+  serverName,
+  onShowMobileNav,
+  onHideMobileNav
 }: ChatAreaProps) {
   const [message, setMessage] = useState('')
   const [sending, setSending] = useState(false)
+  const [isScrolledUp, setIsScrolledUp] = useState(false)
   const messagesEndRef = useRef<HTMLDivElement>(null)
+  const messagesContainerRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
-  }, [messages])
+    if (!isScrolledUp) {
+      messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
+    }
+  }, [messages, isScrolledUp])
+
+  useEffect(() => {
+    if (isMobile && onHideMobileNav) {
+      onHideMobileNav()
+    }
+  }, [isMobile, onHideMobileNav])
+
+  const handleScroll = (e: React.UIEvent<HTMLDivElement>) => {
+    const container = e.currentTarget
+    const isAtBottom = container.scrollHeight - container.scrollTop <= container.clientHeight + 50
+    setIsScrolledUp(!isAtBottom)
+    
+    if (isMobile && onShowMobileNav && !isAtBottom) {
+      onShowMobileNav()
+    } else if (isMobile && onHideMobileNav && isAtBottom) {
+      onHideMobileNav()
+    }
+  }
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -85,7 +111,10 @@ export default function ChatArea({
       <div className={`${isMobile ? 'h-14' : 'h-12'} border-b border-gray-600 flex items-center px-4`}>
         {isMobile && onBackToChannels && (
           <button
-            onClick={onBackToChannels}
+            onClick={() => {
+              onBackToChannels()
+              if (onShowMobileNav) onShowMobileNav()
+            }}
             className="mr-3 p-1 text-gray-400 hover:text-white transition-colors"
           >
             <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -104,7 +133,11 @@ export default function ChatArea({
         </div>
       </div>
 
-      <div className="flex-1 overflow-y-auto px-2 md:px-4 py-2 md:py-4">
+      <div 
+        ref={messagesContainerRef}
+        onScroll={handleScroll}
+        className="flex-1 overflow-y-auto px-2 md:px-4 py-2 md:py-4"
+      >
         {messages.length === 0 ? (
           <div className="flex items-center justify-center h-full">
             <div className="text-center px-4">
