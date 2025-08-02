@@ -49,6 +49,7 @@ export default function ChatArea({
     const isAtBottom = container.scrollHeight - container.scrollTop <= container.clientHeight + 50
     setIsScrolledUp(!isAtBottom)
     
+    // Solo mostrar/ocultar navegación móvil, no el header principal
     if (isMobile && onShowMobileNav && !isAtBottom) {
       onShowMobileNav()
     } else if (isMobile && onHideMobileNav && isAtBottom) {
@@ -112,7 +113,7 @@ export default function ChatArea({
 
   return (
     <div className="flex-1 flex flex-col bg-gray-700 h-full relative">
-      <div className={`${isMobile ? 'h-14 fixed top-0 left-0 right-0 z-30' : 'h-12'} border-b border-gray-600 flex items-center justify-between px-4 bg-gray-700 relative`}>
+      <div className={`${isMobile ? 'h-14 fixed top-0 left-0 right-0 z-50' : 'h-12'} border-b border-gray-600 flex items-center justify-between px-4 bg-gray-700`}>
         <div className="flex items-center">
           {isMobile && onBackToChannels && (
             <button
