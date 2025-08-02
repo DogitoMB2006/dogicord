@@ -16,9 +16,10 @@ interface MemberListProps {
   isOpen: boolean
   onClose?: () => void
   isMobile: boolean
+  onUserClick: (userId: string) => void
 }
 
-export default function MemberList({ serverId, serverMembers, isOpen, onClose, isMobile }: MemberListProps) {
+export default function MemberList({ serverId, serverMembers, isOpen, onClose, isMobile, onUserClick }: MemberListProps) {
   const [members, setMembers] = useState<Member[]>([])
   const [loading, setLoading] = useState(true)
 
@@ -96,7 +97,11 @@ export default function MemberList({ serverId, serverMembers, isOpen, onClose, i
                   </h3>
                   <div className="space-y-2">
                     {onlineMembers.map((member) => (
-                      <div key={member.userId} className="flex items-center space-x-3 p-2 rounded-lg hover:bg-gray-700 transition-colors">
+                      <div 
+                        key={member.userId} 
+                        onClick={() => onUserClick(member.userId)}
+                        className="flex items-center space-x-3 p-2 rounded-lg hover:bg-gray-700 transition-colors cursor-pointer"
+                      >
                         <div className="relative">
                           <div className="w-10 h-10 bg-slate-600 rounded-full flex items-center justify-center overflow-hidden">
                             {member.avatar ? (
@@ -134,7 +139,11 @@ export default function MemberList({ serverId, serverMembers, isOpen, onClose, i
                   </h3>
                   <div className="space-y-2">
                     {offlineMembers.map((member) => (
-                      <div key={member.userId} className="flex items-center space-x-3 p-2 rounded-lg hover:bg-gray-700 transition-colors opacity-60">
+                      <div 
+                        key={member.userId} 
+                        onClick={() => onUserClick(member.userId)}
+                        className="flex items-center space-x-3 p-2 rounded-lg hover:bg-gray-700 transition-colors cursor-pointer opacity-60"
+                      >
                         <div className="relative">
                           <div className="w-10 h-10 bg-slate-600 rounded-full flex items-center justify-center overflow-hidden">
                             {member.avatar ? (
@@ -201,7 +210,11 @@ export default function MemberList({ serverId, serverMembers, isOpen, onClose, i
                 </h3>
                 <div className="space-y-1">
                   {onlineMembers.map((member) => (
-                    <div key={member.userId} className="flex items-center space-x-2 p-2 rounded hover:bg-gray-700 transition-colors cursor-pointer">
+                    <div 
+                      key={member.userId} 
+                      onClick={() => onUserClick(member.userId)}
+                      className="flex items-center space-x-2 p-2 rounded hover:bg-gray-700 transition-colors cursor-pointer"
+                    >
                       <div className="relative">
                         <div className="w-8 h-8 bg-slate-600 rounded-full flex items-center justify-center overflow-hidden">
                           {member.avatar ? (
@@ -239,7 +252,11 @@ export default function MemberList({ serverId, serverMembers, isOpen, onClose, i
                 </h3>
                 <div className="space-y-1">
                   {offlineMembers.map((member) => (
-                    <div key={member.userId} className="flex items-center space-x-2 p-2 rounded hover:bg-gray-700 transition-colors cursor-pointer opacity-50">
+                    <div 
+                      key={member.userId} 
+                      onClick={() => onUserClick(member.userId)}
+                      className="flex items-center space-x-2 p-2 rounded hover:bg-gray-700 transition-colors cursor-pointer opacity-50"
+                    >
                       <div className="relative">
                         <div className="w-8 h-8 bg-slate-600 rounded-full flex items-center justify-center overflow-hidden">
                           {member.avatar ? (

@@ -180,10 +180,18 @@ export default function ChatArea({
                   )}
                   
                   <div className={`flex space-x-2 md:space-x-3 hover:bg-gray-800/30 px-1 md:px-2 py-2 md:py-1.5 rounded group`}>
-                    <div className={`${isMobile ? 'w-8 h-8' : 'w-10 h-10'} bg-slate-600 rounded-full flex items-center justify-center flex-shrink-0`}>
-                      <span className={`text-white font-medium ${isMobile ? 'text-xs' : 'text-sm'}`}>
-                        {msg.authorName.charAt(0).toUpperCase()}
-                      </span>
+                    <div className={`${isMobile ? 'w-8 h-8' : 'w-10 h-10'} bg-slate-600 rounded-full flex items-center justify-center flex-shrink-0 overflow-hidden`}>
+                      {msg.authorAvatarUrl ? (
+                        <img
+                          src={msg.authorAvatarUrl}
+                          alt={msg.authorName}
+                          className="w-full h-full object-cover"
+                        />
+                      ) : (
+                        <span className={`text-white font-medium ${isMobile ? 'text-xs' : 'text-sm'}`}>
+                          {msg.authorName.charAt(0).toUpperCase()}
+                        </span>
+                      )}
                     </div>
                     <div className="flex-1 min-w-0">
                       <div className="flex items-baseline space-x-2">

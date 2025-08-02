@@ -11,6 +11,7 @@ import ChatArea from '../components/ui/ChatArea'
 import ServerSettingsModal from '../components/ui/ServerSettingsModal'
 import ProfileModal from '../components/ui/ProfileModal'
 import MemberList from '../components/ui/MemberList'
+import UserProfileModal from '../components/ui/UserProfileModal'
 import type { Message } from '../services/messageService'
 import type { Role } from '../types/permissions'
 
@@ -53,6 +54,8 @@ export default function Home() {
     return saved === 'true'
   })
   const [showMobileMemberList, setShowMobileMemberList] = useState(false)
+  const [selectedUserId, setSelectedUserId] = useState<string | null>(null)
+  const [showUserProfile, setShowUserProfile] = useState(false)
 
   useEffect(() => {
     const checkMobile = () => {
@@ -159,6 +162,7 @@ export default function Home() {
         content,
         currentUser.uid,
         userProfile.username,
+        (userProfile as any).avatar || null,
         activeServerId,
         activeChannelId
       )
@@ -241,6 +245,11 @@ export default function Home() {
       setShowMemberList(newState)
       localStorage.setItem('dogicord-memberlist-open', newState.toString())
     }
+  }
+
+  const handleUserClick = (userId: string) => {
+    setSelectedUserId(userId)
+    setShowUserProfile(true)
   }
 
   const renderMobileNavigation = () => {
@@ -424,6 +433,7 @@ export default function Home() {
               localStorage.setItem('dogicord-memberlist-open', 'false')
             }}
             isMobile={false}
+            onUserClick={handleUserClick}
           />
         )}
       </div>
@@ -487,6 +497,20 @@ export default function Home() {
           isOpen={showMobileMemberList}
           onClose={() => setShowMobileMemberList(false)}
           isMobile={true}
+          onUserClick={handleUserClick}
+        />
+      )}
+
+      {showUserProfile && selectedUserId && activeServerId && (
+        <UserProfileModal
+          isOpen={showUserProfile}
+          onClose={() => {
+            setShowUserProfile(false)
+            setSelectedUserId(null)
+          }}
+          userId={selectedUserId}
+          serverId={activeServerId}
+          isMobile={isMobile}
         />
       )}
     </div>

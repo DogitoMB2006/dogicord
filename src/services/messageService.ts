@@ -15,6 +15,7 @@ export interface Message {
   content: string
   authorId: string
   authorName: string
+  authorAvatarUrl?: string //Nueva Linea
   serverId: string
   channelId: string
   timestamp: Date
@@ -26,7 +27,8 @@ export const messageService = {
   async sendMessage(
     content: string, 
     authorId: string, 
-    authorName: string, 
+    authorName: string,
+    authorAvatarUrl: string | null, //Nueva Linea
     serverId: string, 
     channelId: string
   ): Promise<void> {
@@ -35,6 +37,7 @@ export const messageService = {
         content,
         authorId,
         authorName,
+        authorAvatarUrl, //Nueva Linea
         serverId,
         channelId,
         timestamp: serverTimestamp(),
@@ -59,7 +62,7 @@ export const messageService = {
 
     return onSnapshot(q, (querySnapshot) => {
       const messages: Message[] = []
-      
+
       querySnapshot.forEach((doc) => {
         const data = doc.data()
         messages.push({
@@ -67,6 +70,7 @@ export const messageService = {
           content: data.content,
           authorId: data.authorId,
           authorName: data.authorName,
+          authorAvatarUrl: data.authorAvatarUrl || undefined, //Linea Nueva
           serverId: data.serverId,
           channelId: data.channelId,
           timestamp: data.timestamp ? (data.timestamp as Timestamp).toDate() : new Date(),
@@ -74,7 +78,7 @@ export const messageService = {
           editedAt: data.editedAt ? (data.editedAt as Timestamp).toDate() : undefined
         })
       })
-      
+
       callback(messages)
     })
   }
