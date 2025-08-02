@@ -1,4 +1,3 @@
-
 import { createContext, useContext, useEffect, useState } from 'react'
 import type { ReactNode } from 'react'
 import { onAuthStateChanged } from 'firebase/auth'
@@ -63,7 +62,7 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
       const profileUpdates: any = {}
 
       if (updates.username && updates.username !== userProfile.username) {
-        const isAvailable = await profileService.checkUsernameAvailability(updates.username, currentUser.uid)
+        const isAvailable = await authService.checkUsernameAvailability(updates.username, currentUser.uid)
         if (!isAvailable) {
           throw new Error('Username is already taken')
         }

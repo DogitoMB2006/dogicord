@@ -1,4 +1,3 @@
-// src/components/credentials/Register.tsx
 import { useState, useEffect } from 'react'
 
 type UsernameStatus = 'idle' | 'checking' | 'available' | 'taken' | 'invalid'

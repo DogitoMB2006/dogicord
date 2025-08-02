@@ -1,4 +1,3 @@
-
 import { 
   createUserWithEmailAndPassword, 
   signInWithEmailAndPassword, 
@@ -14,16 +13,25 @@ export interface UserProfile {
   email: string
   username: string
   displayName: string
+  avatar?: string
   createdAt: Date
   lastActive: Date
 }
 
 export const authService = {
-  async checkUsernameAvailability(username: string): Promise<boolean> {
+  async checkUsernameAvailability(username: string, excludeUserId?: string): Promise<boolean> {
     try {
       const q = query(collection(db, 'users'), where('username', '==', username))
       const querySnapshot = await getDocs(q)
-      return querySnapshot.empty
+      
+      if (querySnapshot.empty) return true
+      
+      if (excludeUserId) {
+        const existingUser = querySnapshot.docs[0]
+        return existingUser.id === excludeUserId
+      }
+      
+      return false
     } catch (error: any) {
       throw new Error(error.message)
     }
@@ -31,7 +39,6 @@ export const authService = {
 
   async getUserByUsernameOrEmail(usernameOrEmail: string): Promise<UserProfile | null> {
     try {
-      // Check if it's an email format
       const isEmail = usernameOrEmail.includes('@')
       
       if (isEmail) {

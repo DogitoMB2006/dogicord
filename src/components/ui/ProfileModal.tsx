@@ -1,22 +1,73 @@
-
-import { useState, useRef } from 'react'
+import { useState, useRef, useEffect } from 'react'
 import { useAuth } from '../../contexts/AuthContext'
+import { profileService } from '../../services/profileService'
 
 interface ProfileModalProps {
   isOpen: boolean
   onClose: () => void
-  onUpdateProfile: (updates: { username?: string, avatar?: File }) => Promise<void>
 }
 
-export default function ProfileModal({ isOpen, onClose, onUpdateProfile }: ProfileModalProps) {
-  const { userProfile } = useAuth()
+export default function ProfileModal({ isOpen, onClose }: ProfileModalProps) {
+  const { userProfile, currentUser, updateUserProfile } = useAuth()
   const [username, setUsername] = useState(userProfile?.username || '')
   const [usernameStatus, setUsernameStatus] = useState<'idle' | 'checking' | 'available' | 'taken' | 'invalid'>('idle')
   const [selectedImage, setSelectedImage] = useState<File | null>(null)
   const [previewUrl, setPreviewUrl] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
+  const [checkingTimeout, setCheckingTimeout] = useState<NodeJS.Timeout | null>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
+
+  useEffect(() => {
+    if (userProfile) {
+      setUsername(userProfile.username)
+      setUsernameStatus('idle')
+    }
+  }, [userProfile])
+
+  useEffect(() => {
+    if (!username || username === userProfile?.username) {
+      setUsernameStatus('idle')
+      if (checkingTimeout) {
+        clearTimeout(checkingTimeout)
+        setCheckingTimeout(null)
+      }
+      return
+    }
+
+    if (!validateUsername(username)) {
+      setUsernameStatus('invalid')
+      if (checkingTimeout) {
+        clearTimeout(checkingTimeout)
+        setCheckingTimeout(null)
+      }
+      return
+    }
+
+    if (checkingTimeout) {
+      clearTimeout(checkingTimeout)
+    }
+
+    const timeout = setTimeout(async () => {
+      if (currentUser) {
+        setUsernameStatus('checking')
+        try {
+          const isAvailable = await profileService.checkUsernameAvailability(username, currentUser.uid)
+          setUsernameStatus(isAvailable ? 'available' : 'taken')
+        } catch (error) {
+          setUsernameStatus('idle')
+        }
+      }
+    }, 500)
+
+    setCheckingTimeout(timeout)
+
+    return () => {
+      if (timeout) {
+        clearTimeout(timeout)
+      }
+    }
+  }, [username, userProfile, currentUser])
 
   if (!isOpen || !userProfile) return null
 
@@ -28,19 +79,8 @@ export default function ProfileModal({ isOpen, onClose, onUpdateProfile }: Profi
   }
 
   const handleUsernameChange = (value: string) => {
-    setUsername(value)
-    
-    if (value === userProfile.username) {
-      setUsernameStatus('idle')
-      return
-    }
-
-    if (!validateUsername(value)) {
-      setUsernameStatus('invalid')
-      return
-    }
-
-    setUsernameStatus('available')
+    const cleanValue = value.toLowerCase().replace(/[^a-z0-9_-]/g, '')
+    setUsername(cleanValue)
   }
 
   const handleImageSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -94,14 +134,35 @@ export default function ProfileModal({ isOpen, onClose, onUpdateProfile }: Profi
     }
 
     setLoading(true)
+    setError('')
+    
     try {
-      await onUpdateProfile(updates)
+      await updateUserProfile(updates)
+      setSelectedImage(null)
+      setPreviewUrl(null)
+      if (fileInputRef.current) {
+        fileInputRef.current.value = ''
+      }
       onClose()
     } catch (err: any) {
       setError(err.message)
     } finally {
       setLoading(false)
     }
+  }
+
+  const handleClose = () => {
+    if (loading) return
+    
+    setUsername(userProfile.username)
+    setSelectedImage(null)
+    setPreviewUrl(null)
+    setError('')
+    setUsernameStatus('idle')
+    if (fileInputRef.current) {
+      fileInputRef.current.value = ''
+    }
+    onClose()
   }
 
   const getUsernameIcon = () => {
@@ -160,6 +221,8 @@ export default function ProfileModal({ isOpen, onClose, onUpdateProfile }: Profi
   }
 
   const currentAvatar = previewUrl || (userProfile as any).avatar
+  const hasChanges = (username !== userProfile.username && usernameStatus === 'available') || selectedImage
+  const canSave = hasChanges && (usernameStatus !== 'invalid' && usernameStatus !== 'taken')
 
   return (
     <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50">
@@ -168,8 +231,9 @@ export default function ProfileModal({ isOpen, onClose, onUpdateProfile }: Profi
           <div className="flex justify-between items-center mb-6">
             <h2 className="text-2xl font-bold text-white">Edit Profile</h2>
             <button
-              onClick={onClose}
-              className="p-2 text-gray-400 hover:text-white transition-colors"
+              onClick={handleClose}
+              disabled={loading}
+              className="p-2 text-gray-400 hover:text-white disabled:text-gray-500 transition-colors"
             >
               <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
@@ -196,7 +260,8 @@ export default function ProfileModal({ isOpen, onClose, onUpdateProfile }: Profi
                 
                 <button
                   onClick={() => fileInputRef.current?.click()}
-                  className="absolute -bottom-2 -right-2 w-8 h-8 bg-slate-600 hover:bg-slate-700 rounded-full flex items-center justify-center transition-colors"
+                  disabled={loading}
+                  className="absolute -bottom-2 -right-2 w-8 h-8 bg-slate-600 hover:bg-slate-700 disabled:bg-gray-600 rounded-full flex items-center justify-center transition-colors"
                 >
                   <svg className="w-4 h-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z" />
@@ -210,13 +275,15 @@ export default function ProfileModal({ isOpen, onClose, onUpdateProfile }: Profi
                 type="file"
                 accept="image/*"
                 onChange={handleImageSelect}
+                disabled={loading}
                 className="hidden"
               />
               
               {selectedImage && (
                 <button
                   onClick={handleRemoveImage}
-                  className="block mx-auto mt-2 text-sm text-red-400 hover:text-red-300 transition-colors"
+                  disabled={loading}
+                  className="block mx-auto mt-2 text-sm text-red-400 hover:text-red-300 disabled:text-gray-500 transition-colors"
                 >
                   Remove image
                 </button>
@@ -235,8 +302,9 @@ export default function ProfileModal({ isOpen, onClose, onUpdateProfile }: Profi
                 <input
                   type="text"
                   value={username}
-                  onChange={(e) => handleUsernameChange(e.target.value.toLowerCase().replace(/[^a-z0-9_-]/g, ''))}
-                  className={`w-full px-4 py-3 bg-gray-900 border rounded-lg text-white placeholder-gray-500 focus:outline-none focus:ring-2 transition-all duration-200 ${getUsernameBorderColor()}`}
+                  onChange={(e) => handleUsernameChange(e.target.value)}
+                  disabled={loading}
+                  className={`w-full px-4 py-3 bg-gray-900 border rounded-lg text-white placeholder-gray-500 focus:outline-none focus:ring-2 transition-all duration-200 disabled:bg-gray-700 disabled:cursor-not-allowed ${getUsernameBorderColor()}`}
                   placeholder="Enter username"
                   maxLength={20}
                 />
@@ -269,7 +337,7 @@ export default function ProfileModal({ isOpen, onClose, onUpdateProfile }: Profi
 
             <div className="flex space-x-3 pt-4">
               <button
-                onClick={onClose}
+                onClick={handleClose}
                 disabled={loading}
                 className="flex-1 py-3 px-4 bg-gray-700 hover:bg-gray-600 disabled:bg-gray-600 disabled:cursor-not-allowed text-white rounded-lg transition-colors"
               >
@@ -277,7 +345,7 @@ export default function ProfileModal({ isOpen, onClose, onUpdateProfile }: Profi
               </button>
               <button
                 onClick={handleSave}
-                disabled={loading || (username === userProfile.username && !selectedImage) || usernameStatus === 'invalid' || usernameStatus === 'taken'}
+                disabled={loading || !canSave}
                 className="flex-1 py-3 px-4 bg-slate-700 hover:bg-slate-600 disabled:bg-gray-600 disabled:cursor-not-allowed text-white rounded-lg transition-colors flex items-center justify-center"
               >
                 {loading ? (

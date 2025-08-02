@@ -1,4 +1,3 @@
-
 import { useState, useEffect } from 'react'
 import { useServer } from '../contexts/ServerContext'
 import { useAuth } from '../contexts/AuthContext'
@@ -10,6 +9,7 @@ import ServerModal from '../components/ui/ServerModal'
 import ChannelSidebar from '../components/ui/ChannelSidebar'
 import ChatArea from '../components/ui/ChatArea'
 import ServerSettingsModal from '../components/ui/ServerSettingsModal'
+import ProfileModal from '../components/ui/ProfileModal'
 import type { Message } from '../services/messageService'
 import type { Role } from '../types/permissions'
 
@@ -38,6 +38,7 @@ export default function Home() {
   const [activeChannelId, setActiveChannelId] = useState<string>('general')
   const [isModalOpen, setIsModalOpen] = useState(false)
   const [isServerSettingsOpen, setIsServerSettingsOpen] = useState(false)
+  const [isProfileModalOpen, setIsProfileModalOpen] = useState(false)
   const [messages, setMessages] = useState<Message[]>([])
   const [error, setError] = useState('')
   const [userRoles, setUserRoles] = useState<Role[]>([])
@@ -260,6 +261,7 @@ export default function Home() {
           onChannelSelect={handleChannelSelect}
           onLeaveServer={() => {}}
           onOpenServerSettings={() => setIsServerSettingsOpen(true)}
+          onOpenProfileModal={() => setIsProfileModalOpen(true)}
           canManageServer={hasPermission('manage_server') || activeServer.ownerId === currentUser?.uid}
         />
 
@@ -311,6 +313,11 @@ export default function Home() {
           onDeleteChannel={handleDeleteChannel}
         />
       )}
+
+      <ProfileModal
+        isOpen={isProfileModalOpen}
+        onClose={() => setIsProfileModalOpen(false)}
+      />
     </div>
   )
 }

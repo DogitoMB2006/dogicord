@@ -1,9 +1,7 @@
-
 import { doc, updateDoc, query, collection, where, getDocs } from 'firebase/firestore'
-import { ref, uploadBytes, getDownloadURL, deleteObject } from 'firebase/storage'
+import { ref, uploadBytes, getDownloadURL, deleteObject, getStorage } from 'firebase/storage'
 import { updateProfile } from 'firebase/auth'
-import { db } from '../config/firebase'
-import { auth } from '../config/firebase'
+import { db, auth } from '../config/firebase'
 
 export const profileService = {
   async checkUsernameAvailability(username: string, currentUserId: string): Promise<boolean> {
@@ -26,8 +24,10 @@ export const profileService = {
 
   async uploadAvatar(file: File, userId: string): Promise<string> {
     try {
-      const storage = (await import('firebase/storage')).getStorage()
-      const avatarRef = ref(storage, `avatars/${userId}/${Date.now()}_${file.name}`)
+      const storage = getStorage()
+      const fileExtension = file.name.split('.').pop()
+      const fileName = `${userId}_${Date.now()}.${fileExtension}`
+      const avatarRef = ref(storage, `avatars/${fileName}`)
       
       const snapshot = await uploadBytes(avatarRef, file)
       const downloadURL = await getDownloadURL(snapshot.ref)
@@ -40,7 +40,7 @@ export const profileService = {
 
   async deleteAvatar(avatarUrl: string): Promise<void> {
     try {
-      const storage = (await import('firebase/storage')).getStorage()
+      const storage = getStorage()
       const avatarRef = ref(storage, avatarUrl)
       await deleteObject(avatarRef)
     } catch (error: any) {
