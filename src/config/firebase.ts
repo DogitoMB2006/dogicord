@@ -4,13 +4,13 @@ import { getFirestore } from 'firebase/firestore'
 import { getStorage } from 'firebase/storage'
 
 const firebaseConfig = {
-  apiKey: "AIzaSyA8KxZlAYOUDf2wT8sIsUjCUmYbaNR0tyQ",
-  authDomain: "chatroom-6b928.firebaseapp.com",
+  apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
+  authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN,
   databaseURL: "https://chatroom-6b928-default-rtdb.firebaseio.com",
-  projectId: "chatroom-6b928",
-  storageBucket: "chatroom-6b928.appspot.com",
-  messagingSenderId: "709627572679",
-  appId: "1:709627572679:web:348575b839909fc80f29e2",
+  projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID,
+  storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET,
+  messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID,
+  appId: import.meta.env.VITE_FIREBASE_APP_ID,
   measurementId: "G-QP66H024GT"
 }
 
