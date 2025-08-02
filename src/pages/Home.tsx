@@ -10,6 +10,7 @@ import ChannelSidebar from '../components/ui/ChannelSidebar'
 import ChatArea from '../components/ui/ChatArea'
 import ServerSettingsModal from '../components/ui/ServerSettingsModal'
 import ProfileModal from '../components/ui/ProfileModal'
+import MemberList from '../components/ui/MemberList'
 import type { Message } from '../services/messageService'
 import type { Role } from '../types/permissions'
 
@@ -47,6 +48,8 @@ export default function Home() {
   const [mobileView, setMobileView] = useState<MobileView>('chat')
   const [isMobile, setIsMobile] = useState(false)
   const [showMobileNav, setShowMobileNav] = useState(true)
+  const [showMemberList, setShowMemberList] = useState(false)
+  const [showMobileMemberList, setShowMobileMemberList] = useState(false)
 
   useEffect(() => {
     const checkMobile = () => {
@@ -227,6 +230,14 @@ export default function Home() {
     ]
   }
 
+  const handleToggleMemberList = () => {
+    if (isMobile) {
+      setShowMobileMemberList(!showMobileMemberList)
+    } else {
+      setShowMemberList(!showMemberList)
+    }
+  }
+
   const renderMobileNavigation = () => {
     if (!isMobile || !showMobileNav) return null
 
@@ -368,6 +379,7 @@ export default function Home() {
               serverName={activeServer.name}
               onShowMobileNav={() => setShowMobileNav(true)}
               onHideMobileNav={() => setShowMobileNav(false)}
+              onToggleMemberList={handleToggleMemberList}
             />
           </div>
         </div>
@@ -394,7 +406,18 @@ export default function Home() {
           onSendMessage={handleSendMessage}
           isMobile={false}
           serverName={activeServer.name}
+          onToggleMemberList={handleToggleMemberList}
         />
+
+        {showMemberList && (
+          <MemberList
+            serverId={activeServerId!}
+            serverMembers={activeServer.members}
+            isOpen={showMemberList}
+            onClose={() => setShowMemberList(false)}
+            isMobile={false}
+          />
+        )}
       </div>
     )
   }
@@ -448,6 +471,16 @@ export default function Home() {
         isOpen={isProfileModalOpen}
         onClose={() => setIsProfileModalOpen(false)}
       />
+
+      {showMobileMemberList && activeServer && (
+        <MemberList
+          serverId={activeServerId!}
+          serverMembers={activeServer.members}
+          isOpen={showMobileMemberList}
+          onClose={() => setShowMobileMemberList(false)}
+          isMobile={true}
+        />
+      )}
     </div>
   )
 }

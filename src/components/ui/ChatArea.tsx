@@ -10,6 +10,7 @@ interface ChatAreaProps {
   serverName: string
   onShowMobileNav?: () => void
   onHideMobileNav?: () => void
+  onToggleMemberList?: () => void
 }
 
 export default function ChatArea({ 
@@ -20,7 +21,8 @@ export default function ChatArea({
   onBackToChannels,
   serverName,
   onShowMobileNav,
-  onHideMobileNav
+  onHideMobileNav,
+  onToggleMemberList
 }: ChatAreaProps) {
   const [message, setMessage] = useState('')
   const [sending, setSending] = useState(false)
@@ -108,29 +110,40 @@ export default function ChatArea({
 
   return (
     <div className="flex-1 flex flex-col bg-gray-700 h-full relative">
-      <div className={`${isMobile ? 'h-14' : 'h-12'} border-b border-gray-600 flex items-center px-4 bg-gray-700 relative z-10`}>
-        {isMobile && onBackToChannels && (
-          <button
-            onClick={() => {
-              onBackToChannels()
-              if (onShowMobileNav) onShowMobileNav()
-            }}
-            className="mr-3 p-1 text-gray-400 hover:text-white transition-colors"
-          >
-            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
-            </svg>
-          </button>
-        )}
-        <div className="flex flex-col">
-          <div className="flex items-center">
-            <span className="text-gray-400 mr-2">#</span>
-            <h3 className={`text-white font-semibold ${isMobile ? 'text-base' : 'text-sm'}`}>{channelName}</h3>
-          </div>
-          {isMobile && (
-            <span className="text-xs text-gray-400">{serverName}</span>
+      <div className={`${isMobile ? 'h-14' : 'h-12'} border-b border-gray-600 flex items-center justify-between px-4 bg-gray-700 relative z-10`}>
+        <div className="flex items-center">
+          {isMobile && onBackToChannels && (
+            <button
+              onClick={() => {
+                onBackToChannels()
+                if (onShowMobileNav) onShowMobileNav()
+              }}
+              className="mr-3 p-1 text-gray-400 hover:text-white transition-colors"
+            >
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+              </svg>
+            </button>
           )}
+          <div className="flex flex-col">
+            <div className="flex items-center">
+              <span className="text-gray-400 mr-2">#</span>
+              <h3 className={`text-white font-semibold ${isMobile ? 'text-base' : 'text-sm'}`}>{channelName}</h3>
+            </div>
+            {isMobile && (
+              <span className="text-xs text-gray-400">{serverName}</span>
+            )}
+          </div>
         </div>
+        
+        <button
+          onClick={onToggleMemberList}
+          className="p-2 text-gray-400 hover:text-white transition-colors"
+        >
+          <svg className={`${isMobile ? 'w-5 h-5' : 'w-4 h-4'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197m13.5-9a2.5 2.5 0 11-5 0 2.5 2.5 0 015 0z" />
+          </svg>
+        </button>
       </div>
 
       <div 
