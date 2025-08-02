@@ -9,11 +9,71 @@ interface ServerSidebarProps {
   activeServerId?: string
   onServerSelect: (serverId: string) => void
   onAddServerClick: () => void
+  isMobile: boolean
 }
 
-export default function ServerSidebar({ servers, activeServerId, onServerSelect, onAddServerClick }: ServerSidebarProps) {
+export default function ServerSidebar({ 
+  servers, 
+  activeServerId, 
+  onServerSelect, 
+  onAddServerClick,
+  isMobile 
+}: ServerSidebarProps) {
   const getServerInitial = (name: string): string => {
     return name.charAt(0).toUpperCase()
+  }
+
+  if (isMobile) {
+    return (
+      <div className="w-full bg-gray-900 flex flex-col h-full">
+        <div className="p-4 border-b border-gray-700">
+          <h2 className="text-white font-bold text-lg">Servers</h2>
+        </div>
+        
+        <div className="flex-1 overflow-y-auto p-4">
+          <div className="mb-6">
+            <div className="w-16 h-16 bg-slate-700 rounded-2xl hover:rounded-xl transition-all duration-200 flex items-center justify-center cursor-pointer group mx-auto">
+              <span className="text-white font-bold text-xl">D</span>
+            </div>
+            <p className="text-center text-gray-400 text-xs mt-2">Dogicord</p>
+          </div>
+
+          <div className="grid grid-cols-3 gap-4">
+            {servers.map((server) => (
+              <div key={server.id} className="relative flex flex-col items-center">
+                <div
+                  onClick={() => onServerSelect(server.id)}
+                  className={`w-16 h-16 rounded-2xl hover:rounded-xl transition-all duration-200 flex items-center justify-center cursor-pointer group ${
+                    activeServerId === server.id
+                      ? 'bg-slate-600 rounded-xl ring-2 ring-slate-500'
+                      : 'bg-gray-700 hover:bg-slate-600'
+                  }`}
+                >
+                  <span className="text-white font-bold text-lg">
+                    {getServerInitial(server.name)}
+                  </span>
+                </div>
+                <p className="text-center text-gray-400 text-xs mt-1 truncate w-full">
+                  {server.name}
+                </p>
+              </div>
+            ))}
+            
+            <div className="flex flex-col items-center">
+              <button
+                onClick={onAddServerClick}
+                className="w-16 h-16 bg-gray-700 hover:bg-green-600 rounded-2xl hover:rounded-xl transition-all duration-200 flex items-center justify-center cursor-pointer group"
+              >
+                <svg className="w-8 h-8 text-green-500 group-hover:text-white transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                </svg>
+              </button>
+              <p className="text-center text-gray-400 text-xs mt-1">Add Server</p>
+            </div>
+          </div>
+        </div>
+      </div>
+    )
   }
 
   return (

@@ -5,9 +5,19 @@ interface ChatAreaProps {
   channelName: string
   messages: Message[]
   onSendMessage: (content: string) => Promise<void>
+  isMobile: boolean
+  onBackToChannels?: () => void
+  serverName: string
 }
 
-export default function ChatArea({ channelName, messages, onSendMessage }: ChatAreaProps) {
+export default function ChatArea({ 
+  channelName, 
+  messages, 
+  onSendMessage, 
+  isMobile, 
+  onBackToChannels,
+  serverName 
+}: ChatAreaProps) {
   const [message, setMessage] = useState('')
   const [sending, setSending] = useState(false)
   const messagesEndRef = useRef<HTMLDivElement>(null)
@@ -71,21 +81,38 @@ export default function ChatArea({ channelName, messages, onSendMessage }: ChatA
   }
 
   return (
-    <div className="flex-1 flex flex-col bg-gray-700">
-      <div className="h-12 border-b border-gray-600 flex items-center px-4">
-        <span className="text-gray-400 mr-2">#</span>
-        <h3 className="text-white font-semibold">{channelName}</h3>
+    <div className="flex-1 flex flex-col bg-gray-700 h-full">
+      <div className={`${isMobile ? 'h-14' : 'h-12'} border-b border-gray-600 flex items-center px-4`}>
+        {isMobile && onBackToChannels && (
+          <button
+            onClick={onBackToChannels}
+            className="mr-3 p-1 text-gray-400 hover:text-white transition-colors"
+          >
+            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+            </svg>
+          </button>
+        )}
+        <div className="flex flex-col">
+          <div className="flex items-center">
+            <span className="text-gray-400 mr-2">#</span>
+            <h3 className={`text-white font-semibold ${isMobile ? 'text-base' : 'text-sm'}`}>{channelName}</h3>
+          </div>
+          {isMobile && (
+            <span className="text-xs text-gray-400">{serverName}</span>
+          )}
+        </div>
       </div>
 
-      <div className="flex-1 overflow-y-auto px-4 py-4">
+      <div className="flex-1 overflow-y-auto px-2 md:px-4 py-2 md:py-4">
         {messages.length === 0 ? (
           <div className="flex items-center justify-center h-full">
-            <div className="text-center">
-              <div className="w-16 h-16 bg-gray-600 rounded-full flex items-center justify-center mx-auto mb-4">
-                <span className="text-2xl">#</span>
+            <div className="text-center px-4">
+              <div className={`${isMobile ? 'w-12 h-12' : 'w-16 h-16'} bg-gray-600 rounded-full flex items-center justify-center mx-auto mb-4`}>
+                <span className={`${isMobile ? 'text-lg' : 'text-2xl'}`}>#</span>
               </div>
-              <h4 className="text-xl font-semibold text-white mb-2">Welcome to #{channelName}!</h4>
-              <p className="text-gray-400">This is the start of the #{channelName} channel.</p>
+              <h4 className={`${isMobile ? 'text-lg' : 'text-xl'} font-semibold text-white mb-2`}>Welcome to #{channelName}!</h4>
+              <p className={`text-gray-400 ${isMobile ? 'text-sm' : 'text-base'}`}>This is the start of the #{channelName} channel.</p>
             </div>
           </div>
         ) : (
@@ -97,29 +124,29 @@ export default function ChatArea({ channelName, messages, onSendMessage }: ChatA
               return (
                 <div key={msg.id}>
                   {showDateSeparator && (
-                    <div className="flex items-center my-6">
+                    <div className="flex items-center my-4 md:my-6">
                       <div className="flex-1 h-px bg-gray-600"></div>
-                      <span className="px-4 text-xs text-gray-400 bg-gray-700">
+                      <span className={`px-4 text-xs text-gray-400 bg-gray-700 ${isMobile ? 'text-xs' : 'text-xs'}`}>
                         {formatDate(msg.timestamp)}
                       </span>
                       <div className="flex-1 h-px bg-gray-600"></div>
                     </div>
                   )}
                   
-                  <div className="flex space-x-3 hover:bg-gray-800/30 px-2 py-1.5 rounded group">
-                    <div className="w-10 h-10 bg-slate-600 rounded-full flex items-center justify-center flex-shrink-0">
-                      <span className="text-white font-medium text-sm">
+                  <div className={`flex space-x-2 md:space-x-3 hover:bg-gray-800/30 px-1 md:px-2 py-2 md:py-1.5 rounded group`}>
+                    <div className={`${isMobile ? 'w-8 h-8' : 'w-10 h-10'} bg-slate-600 rounded-full flex items-center justify-center flex-shrink-0`}>
+                      <span className={`text-white font-medium ${isMobile ? 'text-xs' : 'text-sm'}`}>
                         {msg.authorName.charAt(0).toUpperCase()}
                       </span>
                     </div>
                     <div className="flex-1 min-w-0">
                       <div className="flex items-baseline space-x-2">
-                        <span className="font-medium text-white">{msg.authorName}</span>
-                        <span className="text-xs text-gray-400 group-hover:text-gray-300">
+                        <span className={`font-medium text-white ${isMobile ? 'text-sm' : 'text-base'}`}>{msg.authorName}</span>
+                        <span className={`text-gray-400 group-hover:text-gray-300 ${isMobile ? 'text-xs' : 'text-xs'}`}>
                           {formatTime(msg.timestamp)}
                         </span>
                       </div>
-                      <p className="text-gray-200 break-words mt-0.5 leading-relaxed">
+                      <p className={`text-gray-200 break-words mt-0.5 leading-relaxed ${isMobile ? 'text-sm' : 'text-base'}`}>
                         {msg.content}
                       </p>
                     </div>
@@ -132,7 +159,7 @@ export default function ChatArea({ channelName, messages, onSendMessage }: ChatA
         <div ref={messagesEndRef} />
       </div>
 
-      <div className="p-4">
+      <div className={`p-2 md:p-4 ${isMobile ? 'pb-4' : ''}`}>
         <form onSubmit={handleSubmit}>
           <div className="relative">
             <input
@@ -141,24 +168,24 @@ export default function ChatArea({ channelName, messages, onSendMessage }: ChatA
               onChange={(e) => setMessage(e.target.value)}
               placeholder={`Message #${channelName}`}
               disabled={sending}
-              className="w-full px-4 py-3 pr-12 bg-gray-600 border-none rounded-lg text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-slate-500 disabled:bg-gray-700 disabled:cursor-not-allowed"
+              className={`w-full px-3 md:px-4 py-2 md:py-3 pr-10 md:pr-12 bg-gray-600 border-none rounded-lg text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-slate-500 disabled:bg-gray-700 disabled:cursor-not-allowed ${isMobile ? 'text-sm' : 'text-base'}`}
               maxLength={2000}
             />
             <button
               type="submit"
               disabled={!message.trim() || sending}
-              className="absolute right-2 top-1/2 transform -translate-y-1/2 p-2 text-gray-400 hover:text-white disabled:text-gray-500 transition-colors"
+              className={`absolute right-2 top-1/2 transform -translate-y-1/2 p-1 md:p-2 text-gray-400 hover:text-white disabled:text-gray-500 transition-colors`}
             >
               {sending ? (
-                <div className="w-4 h-4 border-2 border-gray-400 border-t-transparent rounded-full animate-spin"></div>
+                <div className={`${isMobile ? 'w-3 h-3' : 'w-4 h-4'} border-2 border-gray-400 border-t-transparent rounded-full animate-spin`}></div>
               ) : (
-                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <svg className={`${isMobile ? 'w-4 h-4' : 'w-5 h-5'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" />
                 </svg>
               )}
             </button>
           </div>
-          <div className="text-xs text-gray-500 mt-1">
+          <div className={`text-gray-500 mt-1 ${isMobile ? 'text-xs' : 'text-xs'}`}>
             {message.length}/2000
           </div>
         </form>
