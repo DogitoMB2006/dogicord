@@ -107,8 +107,8 @@ export default function ChatArea({
   }
 
   return (
-    <div className="flex-1 flex flex-col bg-gray-700 h-full">
-      <div className={`${isMobile ? 'h-14' : 'h-12'} border-b border-gray-600 flex items-center px-4`}>
+    <div className="flex-1 flex flex-col bg-gray-700 h-full relative">
+      <div className={`${isMobile ? 'h-14' : 'h-12'} border-b border-gray-600 flex items-center px-4 bg-gray-700 relative z-10`}>
         {isMobile && onBackToChannels && (
           <button
             onClick={() => {
@@ -136,7 +136,7 @@ export default function ChatArea({
       <div 
         ref={messagesContainerRef}
         onScroll={handleScroll}
-        className="flex-1 overflow-y-auto px-2 md:px-4 py-2 md:py-4"
+        className={`flex-1 overflow-y-auto px-2 md:px-4 py-2 md:py-4 ${isMobile ? 'pb-20' : ''}`}
       >
         {messages.length === 0 ? (
           <div className="flex items-center justify-center h-full">
@@ -192,7 +192,7 @@ export default function ChatArea({
         <div ref={messagesEndRef} />
       </div>
 
-      <div className={`p-2 md:p-4 ${isMobile ? 'pb-4' : ''}`}>
+      <div className={`${isMobile ? 'fixed bottom-0 left-0 right-0 bg-gray-700 border-t border-gray-600 z-20' : ''} p-2 md:p-4 ${isMobile ? 'pb-4' : ''}`}>
         <form onSubmit={handleSubmit}>
           <div className="relative">
             <input
