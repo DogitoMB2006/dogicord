@@ -394,6 +394,7 @@ export default function Home() {
               onShowMobileNav={() => setShowMobileNav(true)}
               onHideMobileNav={() => setShowMobileNav(false)}
               onToggleMemberList={handleToggleMemberList}
+              onUserClick={handleUserClick}
             />
           </div>
         </div>
@@ -421,6 +422,7 @@ export default function Home() {
           isMobile={false}
           serverName={activeServer.name}
           onToggleMemberList={handleToggleMemberList}
+          onUserClick={handleUserClick}
         />
 
         {showMemberList && (

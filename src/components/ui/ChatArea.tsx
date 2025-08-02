@@ -11,6 +11,7 @@ interface ChatAreaProps {
   onShowMobileNav?: () => void
   onHideMobileNav?: () => void
   onToggleMemberList?: () => void
+  onUserClick?: (userId: string) => void
 }
 
 export default function ChatArea({ 
@@ -22,7 +23,8 @@ export default function ChatArea({
   serverName,
   onShowMobileNav,
   onHideMobileNav,
-  onToggleMemberList
+  onToggleMemberList,
+  onUserClick
 }: ChatAreaProps) {
   const [message, setMessage] = useState('')
   const [sending, setSending] = useState(false)
@@ -180,7 +182,10 @@ export default function ChatArea({
                   )}
                   
                   <div className={`flex space-x-2 md:space-x-3 hover:bg-gray-800/30 px-1 md:px-2 py-2 md:py-1.5 rounded group`}>
-                    <div className={`${isMobile ? 'w-8 h-8' : 'w-10 h-10'} bg-slate-600 rounded-full flex items-center justify-center flex-shrink-0 overflow-hidden`}>
+                    <div 
+                      onClick={() => onUserClick && onUserClick(msg.authorId)}
+                      className={`${isMobile ? 'w-8 h-8' : 'w-10 h-10'} bg-slate-600 rounded-full flex items-center justify-center flex-shrink-0 overflow-hidden cursor-pointer hover:ring-2 hover:ring-slate-500 transition-all`}
+                    >
                       {msg.authorAvatarUrl ? (
                         <img
                           src={msg.authorAvatarUrl}
@@ -195,7 +200,12 @@ export default function ChatArea({
                     </div>
                     <div className="flex-1 min-w-0">
                       <div className="flex items-baseline space-x-2">
-                        <span className={`font-medium text-white ${isMobile ? 'text-sm' : 'text-base'}`}>{msg.authorName}</span>
+                        <span 
+                          onClick={() => onUserClick && onUserClick(msg.authorId)}
+                          className={`font-medium text-white cursor-pointer hover:underline ${isMobile ? 'text-sm' : 'text-base'}`}
+                        >
+                          {msg.authorName}
+                        </span>
                         <span className={`text-gray-400 group-hover:text-gray-300 ${isMobile ? 'text-xs' : 'text-xs'}`}>
                           {formatTime(msg.timestamp)}
                         </span>
