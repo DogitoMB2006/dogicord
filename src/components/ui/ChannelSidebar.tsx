@@ -53,7 +53,22 @@ export default function ChannelSidebar({
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
               </svg>
             </button>
-            <h2 className="text-white font-semibold truncate flex-1">{serverName}</h2>
+            <div 
+              className="flex items-center justify-between flex-1 cursor-pointer hover:bg-gray-750 rounded px-2 py-1 transition-colors"
+              onClick={() => setShowServerDropdown(!showServerDropdown)}
+            >
+              <h2 className="text-white font-semibold truncate">{serverName}</h2>
+              <svg 
+                className={`w-4 h-4 text-gray-400 hover:text-white transition-all duration-200 ${
+                  showServerDropdown ? 'rotate-180' : ''
+                }`} 
+                fill="none" 
+                stroke="currentColor" 
+                viewBox="0 0 24 24"
+              >
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+              </svg>
+            </div>
           </div>
         )}
         
@@ -76,19 +91,19 @@ export default function ChannelSidebar({
           </div>
         )}
 
-        {showServerDropdown && !isMobile && (
+        {showServerDropdown && (
           <>
             <div 
               className="fixed inset-0 z-10" 
               onClick={() => setShowServerDropdown(false)}
             />
-            <div className="absolute top-12 left-4 right-4 bg-gray-900 border border-gray-700 rounded-lg shadow-2xl z-20 py-2">
+            <div className={`absolute ${isMobile ? 'top-16 left-4 right-4' : 'top-12 left-4 right-4'} bg-gray-900 border border-gray-700 rounded-lg shadow-2xl z-20 py-2`}>
               <button
                 onClick={() => {
                   navigator.clipboard.writeText(window.location.origin + '/invite/' + serverName)
                   setShowServerDropdown(false)
                 }}
-                className="w-full px-4 py-2 text-left text-indigo-400 hover:bg-gray-800 transition-colors"
+                className={`w-full px-4 py-3 md:py-2 text-left text-indigo-400 hover:bg-gray-800 transition-colors ${isMobile ? 'text-base' : 'text-sm'}`}
               >
                 Invite People
               </button>
@@ -99,7 +114,7 @@ export default function ChannelSidebar({
                     onOpenServerSettings()
                     setShowServerDropdown(false)
                   }}
-                  className="w-full px-4 py-2 text-left text-gray-300 hover:bg-gray-800 transition-colors"
+                  className={`w-full px-4 py-3 md:py-2 text-left text-gray-300 hover:bg-gray-800 transition-colors ${isMobile ? 'text-base' : 'text-sm'}`}
                 >
                   Server Settings
                 </button>
@@ -112,7 +127,7 @@ export default function ChannelSidebar({
                   onLeaveServer()
                   setShowServerDropdown(false)
                 }}
-                className="w-full px-4 py-2 text-left text-red-400 hover:bg-gray-800 transition-colors"
+                className={`w-full px-4 py-3 md:py-2 text-left text-red-400 hover:bg-gray-800 transition-colors ${isMobile ? 'text-base' : 'text-sm'}`}
               >
                 Leave Server
               </button>
