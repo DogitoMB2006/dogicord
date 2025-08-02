@@ -27,7 +27,7 @@ interface ChannelCategory {
 type MobileView = 'servers' | 'channels' | 'chat'
 
 export default function Home() {
-  const { currentUser, userProfile } = useAuth()
+  const { currentUser, userProfile, updateUserProfile } = useAuth()
   const { 
     servers, 
     activeServerId, 
@@ -488,6 +488,14 @@ export default function Home() {
       <ProfileModal
         isOpen={isProfileModalOpen}
         onClose={() => setIsProfileModalOpen(false)}
+        onUpdateProfile={async (updates: { username?: string, avatar?: File }) => {
+          try {
+            await updateUserProfile(updates)
+          } catch (error) {
+            console.error('Failed to update profile:', error)
+            throw error
+          }
+        }}
       />
 
       {showMobileMemberList && activeServer && (

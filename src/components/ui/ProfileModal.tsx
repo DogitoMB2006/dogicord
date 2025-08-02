@@ -1,14 +1,16 @@
 import { useState, useRef, useEffect } from 'react'
 import { useAuth } from '../../contexts/AuthContext'
 import { profileService } from '../../services/profileService'
+import { formatDate } from '../../utils/dateUtils'
 
 interface ProfileModalProps {
   isOpen: boolean
   onClose: () => void
+  onUpdateProfile: (updates: { username?: string, avatar?: File }) => Promise<void>
 }
 
-export default function ProfileModal({ isOpen, onClose }: ProfileModalProps) {
-  const { userProfile, currentUser, updateUserProfile } = useAuth()
+export default function ProfileModal({ isOpen, onClose, onUpdateProfile }: ProfileModalProps) {
+  const { userProfile, currentUser } = useAuth()
   const [username, setUsername] = useState(userProfile?.username || '')
   const [usernameStatus, setUsernameStatus] = useState<'idle' | 'checking' | 'available' | 'taken' | 'invalid'>('idle')
   const [selectedImage, setSelectedImage] = useState<File | null>(null)
@@ -137,7 +139,7 @@ export default function ProfileModal({ isOpen, onClose }: ProfileModalProps) {
     setError('')
     
     try {
-      await updateUserProfile(updates)
+      await onUpdateProfile(updates)
       setSelectedImage(null)
       setPreviewUrl(null)
       if (fileInputRef.current) {
@@ -327,6 +329,20 @@ export default function ProfileModal({ isOpen, onClose }: ProfileModalProps) {
                 className="w-full px-4 py-3 bg-gray-700 border border-gray-600 rounded-lg text-gray-400 cursor-not-allowed"
               />
               <p className="text-xs text-gray-500 mt-1">Email cannot be changed</p>
+            </div>
+
+            <div>
+              <h4 className="text-sm font-medium text-gray-300 mb-2">Account Information</h4>
+              <div className="space-y-2 text-sm">
+                <div className="flex justify-between">
+                  <span className="text-gray-400">Member Since:</span>
+                  <span className="text-white">{formatDate(userProfile.createdAt)}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-gray-400">Last Active:</span>
+                  <span className="text-white">{formatDate(userProfile.lastActive)}</span>
+                </div>
+              </div>
             </div>
 
             {error && (
