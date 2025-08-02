@@ -108,7 +108,6 @@ export default function MessageItem({
           {!isEditing && (isOwnMessage || canManageMessages) && (
             <div className="ml-auto">
               <MessageActions
-                messageId={message.id}
                 isOwnMessage={isOwnMessage}
                 canManageMessages={canManageMessages}
                 onEdit={() => setIsEditing(true)}

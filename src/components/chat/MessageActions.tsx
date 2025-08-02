@@ -1,8 +1,7 @@
-
+// src/components/chat/MessageActions.tsx
 import { useState, useRef, useEffect } from 'react'
 
 interface MessageActionsProps {
-  messageId: string
   isOwnMessage: boolean
   canManageMessages: boolean
   onEdit: () => void
@@ -11,7 +10,6 @@ interface MessageActionsProps {
 }
 
 export default function MessageActions({ 
-  messageId, 
   isOwnMessage, 
   canManageMessages, 
   onEdit, 
