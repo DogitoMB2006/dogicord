@@ -1,8 +1,10 @@
+// src/components/ui/UserProfileModal.tsx
 import { useState, useEffect } from 'react'
 import { authService } from '../../services/authService'
 import { serverService } from '../../services/serverService'
 import type { UserProfile } from '../../services/authService'
 import type { Role } from '../../types/permissions'
+import RoleAssignment from '../server/RoleAssignment'
 
 interface UserProfileModalProps {
   isOpen: boolean
@@ -10,12 +12,28 @@ interface UserProfileModalProps {
   userId: string
   serverId: string
   isMobile: boolean
+  currentUserId?: string
+  currentUserRoles?: Role[]
+  isOwner?: boolean
+  onRoleUpdate?: () => Promise<void>
 }
 
-export default function UserProfileModal({ isOpen, onClose, userId, serverId, isMobile }: UserProfileModalProps) {
+export default function UserProfileModal({ 
+  isOpen, 
+  onClose, 
+  userId, 
+  serverId, 
+  isMobile,
+  currentUserId,
+  currentUserRoles = [],
+  isOwner = false,
+  onRoleUpdate
+}: UserProfileModalProps) {
   const [userProfile, setUserProfile] = useState<UserProfile | null>(null)
   const [userRoles, setUserRoles] = useState<Role[]>([])
+  const [allServerRoles, setAllServerRoles] = useState<Role[]>([])
   const [loading, setLoading] = useState(true)
+  const [showRoleAssignment, setShowRoleAssignment] = useState(false)
 
   const formatDate = (date: any): string => {
     if (!date) return 'Unknown'
@@ -56,13 +74,15 @@ export default function UserProfileModal({ isOpen, onClose, userId, serverId, is
   const loadUserProfile = async () => {
     setLoading(true)
     try {
-      const [profile, roles] = await Promise.all([
+      const [profile, roles, server] = await Promise.all([
         authService.getUserProfile(userId),
-        serverService.getUserRoles(serverId, userId)
+        serverService.getUserRoles(serverId, userId),
+        serverService.getServer(serverId)
       ])
       
       setUserProfile(profile)
       setUserRoles(roles)
+      setAllServerRoles(server?.roles || [])
     } catch (error) {
       console.error('Failed to load user profile:', error)
     } finally {
@@ -70,9 +90,64 @@ export default function UserProfileModal({ isOpen, onClose, userId, serverId, is
     }
   }
 
+  const canManageRoles = (): boolean => {
+    if (!currentUserId || currentUserId === userId) return false
+    if (isOwner) return true
+    
+    return currentUserRoles.some(role => 
+      role.permissions.includes('administrator') || 
+      role.permissions.includes('manage_roles')
+    )
+  }
+
+  const handleAssignRole = async (targetUserId: string, roleId: string) => {
+    try {
+      await serverService.assignRoleToUser(serverId, targetUserId, roleId)
+      await loadUserProfile()
+      // Actualizar datos en tiempo real
+      if (onRoleUpdate) {
+        await onRoleUpdate()
+      }
+    } catch (error: any) {
+      throw new Error(error.message)
+    }
+  }
+
+  const handleRemoveRole = async (targetUserId: string, roleId: string) => {
+    try {
+      await serverService.removeRoleFromUser(serverId, targetUserId, roleId)
+      await loadUserProfile()
+      // Actualizar datos en tiempo real
+      if (onRoleUpdate) {
+        await onRoleUpdate()
+      }
+    } catch (error: any) {
+      throw new Error(error.message)
+    }
+  }
+
   if (!isOpen) return null
 
   const renderContent = () => {
+    if (showRoleAssignment) {
+      return (
+        <div className={`${isMobile ? 'p-4' : 'p-6'}`}>
+          <RoleAssignment
+            availableRoles={allServerRoles}
+            userRoles={userRoles}
+            targetUserId={userId}
+            targetUsername={userProfile?.username || 'Unknown'}
+            currentUserRoles={currentUserRoles}
+            isOwner={isOwner}
+            onAssignRole={handleAssignRole}
+            onRemoveRole={handleRemoveRole}
+            onClose={() => setShowRoleAssignment(false)}
+            isMobile={isMobile}
+          />
+        </div>
+      )
+    }
+
     if (loading) {
       return (
         <div className="flex items-center justify-center py-12">
@@ -119,13 +194,29 @@ export default function UserProfileModal({ isOpen, onClose, userId, serverId, is
         </div>
 
         <div className={`${isMobile ? 'mt-8' : 'mt-12'} space-y-4`}>
-          <div>
-            <h2 className={`font-bold text-white ${isMobile ? 'text-xl' : 'text-2xl'}`}>
-              {userProfile.displayName || userProfile.username}
-            </h2>
-            <p className={`text-gray-400 ${isMobile ? 'text-sm' : 'text-base'}`}>
-              @{userProfile.username}
-            </p>
+          <div className="flex items-center justify-between">
+            <div>
+              <h2 className={`font-bold text-white ${isMobile ? 'text-xl' : 'text-2xl'}`}>
+                {userProfile.displayName || userProfile.username}
+              </h2>
+              <p className={`text-gray-400 ${isMobile ? 'text-sm' : 'text-base'}`}>
+                @{userProfile.username}
+              </p>
+            </div>
+            
+            {canManageRoles() && (
+              <button
+                onClick={() => setShowRoleAssignment(true)}
+                className={`px-3 py-1 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors flex items-center space-x-1 ${
+                  isMobile ? 'text-sm' : 'text-sm'
+                }`}
+              >
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                </svg>
+                <span>Roles</span>
+              </button>
+            )}
           </div>
 
           {highestRole && (
@@ -203,9 +294,11 @@ export default function UserProfileModal({ isOpen, onClose, userId, serverId, is
       <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-end justify-center z-50">
         <div className="bg-gray-800 rounded-t-2xl shadow-2xl w-full max-w-sm max-h-[85vh] overflow-y-auto">
           <div className="flex items-center justify-between p-4 border-b border-gray-700">
-            <h2 className="text-lg font-semibold text-white">User Profile</h2>
+            <h2 className="text-lg font-semibold text-white">
+              {showRoleAssignment ? 'Manage Roles' : 'User Profile'}
+            </h2>
             <button
-              onClick={onClose}
+              onClick={showRoleAssignment ? () => setShowRoleAssignment(false) : onClose}
               className="p-2 text-gray-400 hover:text-white transition-colors"
             >
               <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -223,9 +316,11 @@ export default function UserProfileModal({ isOpen, onClose, userId, serverId, is
     <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
       <div className="bg-gray-800 rounded-2xl shadow-2xl w-full max-w-md max-h-[80vh] overflow-y-auto">
         <div className="flex items-center justify-between p-4 border-b border-gray-700">
-          <h2 className="text-xl font-semibold text-white">User Profile</h2>
+          <h2 className="text-xl font-semibold text-white">
+            {showRoleAssignment ? 'Manage Roles' : 'User Profile'}
+          </h2>
           <button
-            onClick={onClose}
+            onClick={showRoleAssignment ? () => setShowRoleAssignment(false) : onClose}
             className="p-2 text-gray-400 hover:text-white transition-colors"
           >
             <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">

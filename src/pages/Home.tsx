@@ -1,3 +1,4 @@
+// src/pages/Home.tsx
 import { useState, useEffect } from 'react'
 import { useServer } from '../contexts/ServerContext'
 import { useAuth } from '../contexts/AuthContext'
@@ -58,6 +59,7 @@ export default function Home() {
   const [showMobileMemberList, setShowMobileMemberList] = useState(false)
   const [selectedUserId, setSelectedUserId] = useState<string | null>(null)
   const [showUserProfile, setShowUserProfile] = useState(false)
+  const [refreshTrigger, setRefreshTrigger] = useState(0)
 
   useEffect(() => {
     const checkMobile = () => {
@@ -255,6 +257,17 @@ export default function Home() {
     setShowUserProfile(true)
   }
 
+  const handleRoleUpdate = async () => {
+    // Recargar roles del usuario actual
+    if (activeServerId && currentUser) {
+      await loadUserRoles()
+    }
+    // Recargar servers para actualizar memberlist
+    await refreshServers()
+    // Trigger refresh del MemberList
+    setRefreshTrigger(prev => prev + 1)
+  }
+
   const renderMobileNavigation = () => {
     if (!isMobile || !showMobileNav) return null
 
@@ -443,6 +456,8 @@ export default function Home() {
             }}
             isMobile={false}
             onUserClick={handleUserClick}
+            displayRolesSeparately={activeServer.displayRolesSeparately}
+            refreshTrigger={refreshTrigger}
           />
         )}
       </div>
@@ -491,6 +506,7 @@ export default function Home() {
           onUpdateServer={handleUpdateServer}
           onCreateChannel={handleCreateChannel}
           onDeleteChannel={handleDeleteChannel}
+          currentUserId={currentUser?.uid || ''}
         />
       )}
 
@@ -515,6 +531,8 @@ export default function Home() {
           onClose={() => setShowMobileMemberList(false)}
           isMobile={true}
           onUserClick={handleUserClick}
+          displayRolesSeparately={activeServer.displayRolesSeparately}
+          refreshTrigger={refreshTrigger}
         />
       )}
 
@@ -528,6 +546,10 @@ export default function Home() {
           userId={selectedUserId}
           serverId={activeServerId}
           isMobile={isMobile}
+          currentUserId={currentUser?.uid}
+          currentUserRoles={userRoles}
+          isOwner={activeServer?.ownerId === currentUser?.uid}
+          onRoleUpdate={handleRoleUpdate}
         />
       )}
     </div>

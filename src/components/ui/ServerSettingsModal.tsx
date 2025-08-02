@@ -1,7 +1,9 @@
+// src/components/ui/ServerSettingsModal.tsx
 import { useState, useRef } from 'react'
 import type { Server } from '../../services/serverService'
 import type { Role } from '../../types/permissions'
 import { serverService } from '../../services/serverService'
+import RoleManager from '../server/RoleManager'
 
 interface ServerSettingsModalProps {
   isOpen: boolean
@@ -11,6 +13,7 @@ interface ServerSettingsModalProps {
   onUpdateServer: (updates: Partial<Server>) => Promise<void>
   onCreateChannel: (name: string, type: 'text' | 'voice') => Promise<void>
   onDeleteChannel: (channelId: string) => Promise<void>
+  currentUserId: string
 }
 
 type SettingsTab = 'general' | 'channels' | 'roles' | 'members'
@@ -22,7 +25,8 @@ export default function ServerSettingsModal({
   userRoles,
   onUpdateServer,
   onCreateChannel,
-  onDeleteChannel 
+  onDeleteChannel,
+  currentUserId
 }: ServerSettingsModalProps) {
   const [activeTab, setActiveTab] = useState<SettingsTab>('general')
   const [serverName, setServerName] = useState(server.name)
@@ -33,11 +37,15 @@ export default function ServerSettingsModal({
   const [selectedIcon, setSelectedIcon] = useState<File | null>(null)
   const [previewUrl, setPreviewUrl] = useState<string | null>(null)
   const [iconError, setIconError] = useState('')
+  const [displayRolesSeparately, setDisplayRolesSeparately] = useState(server.displayRolesSeparately ?? true)
   const fileInputRef = useRef<HTMLInputElement>(null)
 
   if (!isOpen) return null
 
+  const isOwner = server.ownerId === currentUserId
+
   const hasPermission = (permission: string): boolean => {
+    if (isOwner) return true
     return userRoles.some(role => 
       role.permissions.includes('administrator') || 
       role.permissions.includes(permission)
@@ -155,6 +163,53 @@ export default function ServerSettingsModal({
           console.error('Failed to delete channel:', error)
         }
       }
+    }
+  }
+
+  const handleCreateRole = async (name: string, color: string, permissions: string[]) => {
+    try {
+      await serverService.createRole(server.id, name, color, permissions)
+      window.location.reload()
+    } catch (error: any) {
+      throw error
+    }
+  }
+
+  const handleUpdateRole = async (roleId: string, updates: Partial<Role>) => {
+    try {
+      await serverService.updateRole(server.id, roleId, updates)
+      window.location.reload()
+    } catch (error: any) {
+      throw error
+    }
+  }
+
+  const handleDeleteRole = async (roleId: string) => {
+    try {
+      await serverService.deleteRole(server.id, roleId)
+      window.location.reload()
+    } catch (error: any) {
+      throw error
+    }
+  }
+
+  const handleReorderRoles = async (roles: Role[]) => {
+    try {
+      await serverService.reorderRoles(server.id, roles)
+      window.location.reload()
+    } catch (error: any) {
+      throw error
+    }
+  }
+
+  const handleToggleDisplayRoles = async () => {
+    const newValue = !displayRolesSeparately
+    setDisplayRolesSeparately(newValue)
+    try {
+      await onUpdateServer({ displayRolesSeparately: newValue })
+    } catch (error) {
+      console.error('Failed to update display roles setting:', error)
+      setDisplayRolesSeparately(!newValue)
     }
   }
 
@@ -358,6 +413,40 @@ export default function ServerSettingsModal({
     </div>
   )
 
+  const renderRolesSettings = () => (
+    <div className="space-y-4">
+      <div className="flex items-center justify-between">
+        <h3 className={`font-semibold text-white ${isMobile ? 'text-lg' : 'text-lg'}`}>
+          Role Management
+        </h3>
+        <div className="flex items-center space-x-3">
+          <label className="flex items-center space-x-2">
+            <input
+              type="checkbox"
+              checked={displayRolesSeparately}
+              onChange={handleToggleDisplayRoles}
+              className="w-4 h-4 text-blue-600 bg-gray-700 border-gray-600 rounded focus:ring-blue-500"
+            />
+            <span className={`text-gray-300 ${isMobile ? 'text-sm' : 'text-base'}`}>
+              Display roles separately from online members
+            </span>
+          </label>
+        </div>
+      </div>
+
+      <RoleManager
+        roles={server.roles}
+        userRoles={userRoles}
+        onCreateRole={handleCreateRole}
+        onUpdateRole={handleUpdateRole}
+        onDeleteRole={handleDeleteRole}
+        onReorderRoles={handleReorderRoles}
+        isMobile={isMobile}
+        isOwner={isOwner}
+      />
+    </div>
+  )
+
   const renderMobileNav = () => {
     if (!isMobile) return null
 
@@ -488,7 +577,7 @@ export default function ServerSettingsModal({
       case 'channels':
         return renderChannelSettings()
       case 'roles':
-        return <div className="text-gray-400 text-center py-8">Roles management coming soon...</div>
+        return renderRolesSettings()
       case 'members':
         return <div className="text-gray-400 text-center py-8">Member management coming soon...</div>
       default:

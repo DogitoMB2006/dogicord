@@ -1,3 +1,4 @@
+// src/services/serverService.ts
 import { 
   collection, 
   doc, 
@@ -26,6 +27,7 @@ export interface Server {
   channels: Channel[]
   roles: Role[]
   icon?: string
+  displayRolesSeparately?: boolean
 }
 
 export interface Channel {
@@ -102,7 +104,8 @@ export const serverService = {
         inviteCode,
         createdAt: new Date(),
         channels: defaultChannels,
-        roles: defaultRoles
+        roles: defaultRoles,
+        displayRolesSeparately: true
       }
 
       await setDoc(doc(db, 'servers', serverId), {
@@ -198,6 +201,116 @@ export const serverService = {
 
       await updateDoc(serverRef, {
         channels: updatedChannels
+      })
+    } catch (error: any) {
+      throw new Error(error.message)
+    }
+  },
+
+  async createRole(serverId: string, name: string, color: string, permissions: string[]): Promise<void> {
+    try {
+      const serverRef = doc(db, 'servers', serverId)
+      const serverDoc = await getDoc(serverRef)
+      
+      if (!serverDoc.exists()) {
+        throw new Error('Server not found')
+      }
+
+      const server = serverDoc.data() as Server
+      const maxPosition = Math.max(...server.roles.map(r => r.position))
+      
+      const newRole: Role = {
+        id: `role_${Date.now()}`,
+        name,
+        color,
+        permissions,
+        position: maxPosition + 1,
+        mentionable: false,
+        createdAt: new Date()
+      }
+
+      await updateDoc(serverRef, {
+        roles: [...server.roles, newRole]
+      })
+    } catch (error: any) {
+      throw new Error(error.message)
+    }
+  },
+
+  async updateRole(serverId: string, roleId: string, updates: Partial<Role>): Promise<void> {
+    try {
+      const serverRef = doc(db, 'servers', serverId)
+      const serverDoc = await getDoc(serverRef)
+      
+      if (!serverDoc.exists()) {
+        throw new Error('Server not found')
+      }
+
+      const server = serverDoc.data() as Server
+      const updatedRoles = server.roles.map(role => 
+        role.id === roleId ? { ...role, ...updates } : role
+      )
+
+      await updateDoc(serverRef, {
+        roles: updatedRoles
+      })
+    } catch (error: any) {
+      throw new Error(error.message)
+    }
+  },
+
+  async deleteRole(serverId: string, roleId: string): Promise<void> {
+    try {
+      const serverRef = doc(db, 'servers', serverId)
+      const serverDoc = await getDoc(serverRef)
+      
+      if (!serverDoc.exists()) {
+        throw new Error('Server not found')
+      }
+
+      const server = serverDoc.data() as Server
+      const role = server.roles.find(r => r.id === roleId)
+      
+      if (!role) {
+        throw new Error('Role not found')
+      }
+
+      if (role.name === '@everyone' || role.name === 'Owner') {
+        throw new Error('Cannot delete protected roles')
+      }
+
+      const updatedRoles = server.roles.filter(r => r.id !== roleId)
+
+      await updateDoc(serverRef, {
+        roles: updatedRoles
+      })
+
+      const membersQuery = query(
+        collection(db, 'serverMembers'),
+        where('serverId', '==', serverId)
+      )
+      
+      const membersSnapshot = await getDocs(membersQuery)
+      
+      for (const memberDoc of membersSnapshot.docs) {
+        const memberData = memberDoc.data()
+        if (memberData.roles.includes(roleId)) {
+          const updatedMemberRoles = memberData.roles.filter((r: string) => r !== roleId)
+          await updateDoc(memberDoc.ref, {
+            roles: updatedMemberRoles
+          })
+        }
+      }
+    } catch (error: any) {
+      throw new Error(error.message)
+    }
+  },
+
+  async reorderRoles(serverId: string, roles: Role[]): Promise<void> {
+    try {
+      const serverRef = doc(db, 'servers', serverId)
+      await updateDoc(serverRef, {
+        roles: roles
       })
     } catch (error: any) {
       throw new Error(error.message)
@@ -303,6 +416,60 @@ export const serverService = {
       return serverData.roles.filter(role => 
         memberData.roles.includes(role.id) || role.id === 'everyone'
       )
+    } catch (error: any) {
+      throw new Error(error.message)
+    }
+  },
+
+  async assignRoleToUser(serverId: string, userId: string, roleId: string): Promise<void> {
+    try {
+      const memberDocRef = doc(db, 'serverMembers', `${serverId}_${userId}`)
+      const memberDoc = await getDoc(memberDocRef)
+      
+      if (!memberDoc.exists()) {
+        throw new Error('Member not found')
+      }
+
+      const memberData = memberDoc.data()
+      const currentRoles = memberData.roles || []
+      
+      if (currentRoles.includes(roleId)) {
+        throw new Error('User already has this role')
+      }
+
+      await updateDoc(memberDocRef, {
+        roles: [...currentRoles, roleId]
+      })
+    } catch (error: any) {
+      throw new Error(error.message)
+    }
+  },
+
+  async removeRoleFromUser(serverId: string, userId: string, roleId: string): Promise<void> {
+    try {
+      const memberDocRef = doc(db, 'serverMembers', `${serverId}_${userId}`)
+      const memberDoc = await getDoc(memberDocRef)
+      
+      if (!memberDoc.exists()) {
+        throw new Error('Member not found')
+      }
+
+      const memberData = memberDoc.data()
+      const currentRoles = memberData.roles || []
+      
+      if (!currentRoles.includes(roleId)) {
+        throw new Error('User does not have this role')
+      }
+
+      if (roleId === 'everyone') {
+        throw new Error('Cannot remove @everyone role')
+      }
+
+      const updatedRoles = currentRoles.filter((r: string) => r !== roleId)
+      
+      await updateDoc(memberDocRef, {
+        roles: updatedRoles
+      })
     } catch (error: any) {
       throw new Error(error.message)
     }
