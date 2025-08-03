@@ -1,9 +1,12 @@
+// src/components/ui/UserProfileModal.tsx
 import { useState, useEffect } from 'react'
 import { authService } from '../../services/authService'
 import { serverService } from '../../services/serverService'
+import { presenceService } from '../../services/presenceService'
 import { useAuth } from '../../contexts/AuthContext'
 import type { UserProfile } from '../../services/authService'
 import type { Role } from '../../types/permissions'
+import type { UserPresence } from '../../services/presenceService'
 import RoleAssignment from '../server/RoleAssignment'
 
 interface UserProfileModalProps {
@@ -35,6 +38,7 @@ export default function UserProfileModal({
   const [allServerRoles, setAllServerRoles] = useState<Role[]>([])
   const [loading, setLoading] = useState(true)
   const [showRoleAssignment, setShowRoleAssignment] = useState(false)
+  const [userPresence, setUserPresence] = useState<UserPresence | null>(null)
 
   const formatDate = (date: any): string => {
     if (!date) return 'Unknown'
@@ -66,11 +70,38 @@ export default function UserProfileModal({
     }
   }
 
+  const formatLastSeen = (lastSeen: Date): string => {
+    const now = new Date()
+    const diffMs = now.getTime() - lastSeen.getTime()
+    const diffMins = Math.floor(diffMs / (1000 * 60))
+    const diffHours = Math.floor(diffMs / (1000 * 60 * 60))
+    const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24))
+
+    if (diffMins < 1) return 'Just now'
+    if (diffMins < 60) return `${diffMins} minutes ago`
+    if (diffHours < 24) return `${diffHours} hours ago`
+    if (diffDays < 7) return `${diffDays} days ago`
+    return lastSeen.toLocaleDateString()
+  }
+
   useEffect(() => {
     if (isOpen && userId) {
       loadUserProfile()
+      loadUserPresence()
     }
   }, [isOpen, userId, serverId])
+
+  useEffect(() => {
+    if (!isOpen || !userId) return
+
+    const unsubscribePresence = presenceService.subscribeToUserPresence(userId, (presence) => {
+      setUserPresence(presence)
+    })
+
+    return () => {
+      unsubscribePresence()
+    }
+  }, [isOpen, userId])
 
   const loadUserProfile = async () => {
     setLoading(true)
@@ -88,6 +119,15 @@ export default function UserProfileModal({
       console.error('Failed to load user profile:', error)
     } finally {
       setLoading(false)
+    }
+  }
+
+  const loadUserPresence = async () => {
+    try {
+      const presence = await presenceService.getUserPresence(userId)
+      setUserPresence(presence)
+    } catch (error) {
+      console.error('Failed to load user presence:', error)
     }
   }
 
@@ -179,6 +219,11 @@ export default function UserProfileModal({
       .filter(role => role.name !== '@everyone')
       .sort((a, b) => b.position - a.position)[0]
 
+    const isOnline = userPresence?.isOnline || false
+    const statusColor = isOnline ? 'bg-green-500' : 'bg-gray-500'
+    const statusText = isOnline ? 'Online' : 'Offline'
+    const userColor = isOnline ? (highestRole?.color || '#99AAB5') : '#747F8D'
+
     return (
       <div className={`${isMobile ? 'p-4' : 'p-6'} space-y-6`}>
         <div className="relative">
@@ -199,7 +244,7 @@ export default function UserProfileModal({
                   </span>
                 )}
               </div>
-              <div className={`absolute -bottom-1 -right-1 ${isMobile ? 'w-4 h-4' : 'w-6 h-6'} bg-green-500 border-2 border-gray-800 rounded-full`}></div>
+              <div className={`absolute -bottom-1 -right-1 ${isMobile ? 'w-4 h-4' : 'w-6 h-6'} ${statusColor} border-2 border-gray-800 rounded-full`}></div>
             </div>
           </div>
         </div>
@@ -207,7 +252,7 @@ export default function UserProfileModal({
         <div className={`${isMobile ? 'mt-8' : 'mt-12'} space-y-4`}>
           <div className="flex items-center justify-between">
             <div>
-              <h2 className={`font-bold text-white ${isMobile ? 'text-xl' : 'text-2xl'}`}>
+              <h2 className={`font-bold ${isMobile ? 'text-xl' : 'text-2xl'}`} style={{ color: userColor }}>
                 {userProfile.displayName || userProfile.username}
               </h2>
               <p className={`text-gray-400 ${isMobile ? 'text-sm' : 'text-base'}`}>
@@ -289,11 +334,20 @@ export default function UserProfileModal({
 
           <div className="pt-4 border-t border-gray-700">
             <div className="flex items-center justify-center">
-              <div className="flex items-center space-x-2 text-green-400">
-                <div className="w-2 h-2 bg-green-400 rounded-full animate-pulse"></div>
-                <span className={`font-medium ${isMobile ? 'text-sm' : 'text-base'}`}>Online</span>
+              <div className={`flex items-center space-x-2 ${isOnline ? 'text-green-400' : 'text-gray-400'}`}>
+                <div className={`w-2 h-2 ${statusColor} rounded-full ${isOnline ? 'animate-pulse' : ''}`}></div>
+                <span className={`font-medium ${isMobile ? 'text-sm' : 'text-base'}`}>
+                  {statusText}
+                </span>
               </div>
             </div>
+            {!isOnline && userPresence?.lastSeen && (
+              <div className="text-center mt-1">
+                <span className={`text-gray-500 ${isMobile ? 'text-xs' : 'text-sm'}`}>
+                  Last seen {formatLastSeen(userPresence.lastSeen)}
+                </span>
+              </div>
+            )}
           </div>
         </div>
       </div>

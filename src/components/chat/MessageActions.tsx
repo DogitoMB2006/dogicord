@@ -1,4 +1,3 @@
-// src/components/chat/MessageActions.tsx
 import { useState, useRef, useEffect } from 'react'
 
 interface MessageActionsProps {

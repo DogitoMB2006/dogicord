@@ -1,9 +1,11 @@
 // src/components/ui/MemberList.tsx
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback, useMemo } from 'react'
 import { serverService } from '../../services/serverService'
 import { authService } from '../../services/authService'
 import { roleSyncService } from '../../services/roleSyncService'
+import { presenceService } from '../../services/presenceService'
 import type { Role } from '../../types/permissions'
+import type { UserPresence } from '../../services/presenceService'
 
 interface Member {
   userId: string
@@ -11,6 +13,7 @@ interface Member {
   avatar?: string
   roles: Role[]
   isOnline: boolean
+  lastSeen: Date
 }
 
 interface RoleGroup {
@@ -40,118 +43,22 @@ export default function MemberList({
   refreshTrigger
 }: MemberListProps) {
   const [members, setMembers] = useState<Member[]>([])
-  const [roleGroups, setRoleGroups] = useState<RoleGroup[]>([])
   const [loading, setLoading] = useState(true)
-  const [serverRoles, setServerRoles] = useState<Role[]>([])
-  const [memberRoleUpdates, setMemberRoleUpdates] = useState<Map<string, Role[]>>(new Map())
 
-  useEffect(() => {
-    if (isOpen && serverId) {
-      loadMembers()
-    }
-  }, [isOpen, serverId, serverMembers, displayRolesSeparately, refreshTrigger])
-
-  useEffect(() => {
-    if (!serverId) return
-
-    const unsubscribeServerRoles = roleSyncService.subscribeToServerRoles(serverId, (roles) => {
-      setServerRoles(roles)
-      if (memberRoleUpdates.size > 0) {
-        updateMembersWithNewRoles()
-      }
-    })
-
-    const unsubscribeAllMembers = roleSyncService.subscribeToAllServerMembers(serverId, (memberUpdates) => {
-      setMemberRoleUpdates(memberUpdates)
-      if (serverRoles.length > 0) {
-        updateMembersWithNewRoles(memberUpdates)
-      }
-    })
-
-    const unsubscribeRoleUpdates = roleSyncService.onRoleUpdate((update) => {
-      if (update.serverId === serverId) {
-        setMembers(prevMembers => 
-          prevMembers.map(member => 
-            member.userId === update.userId 
-              ? { ...member, roles: update.roles }
-              : member
-          )
-        )
-        
-        if (displayRolesSeparately && serverRoles.length > 0) {
-          setTimeout(() => {
-            const updatedMembers = members.map(member => 
-              member.userId === update.userId 
-                ? { ...member, roles: update.roles }
-                : member
-            )
-            organizeByRoles(updatedMembers)
-          }, 100)
-        }
-      }
-    })
-
-    return () => {
-      unsubscribeServerRoles()
-      unsubscribeAllMembers()
-      unsubscribeRoleUpdates()
-    }
-  }, [serverId, displayRolesSeparately, serverRoles, members])
-
-  const updateMembersWithNewRoles = (memberUpdates?: Map<string, Role[]>) => {
-    const updates = memberUpdates || memberRoleUpdates
-    if (updates.size === 0) return
-
-    setMembers(prevMembers => {
-      const updatedMembers = prevMembers.map(member => {
-        const newRoles = updates.get(member.userId)
-        return newRoles ? { ...member, roles: newRoles } : member
-      })
-      
-      if (displayRolesSeparately) {
-        setTimeout(() => organizeByRoles(updatedMembers), 50)
-      }
-      
-      return updatedMembers
-    })
-  }
-
-  const loadMembers = async () => {
-    setLoading(true)
-    try {
-      const memberProfiles: Member[] = []
-      
-      for (const memberId of serverMembers) {
-        const profile = await authService.getUserProfile(memberId)
-        const userRoles = await serverService.getUserRoles(serverId, memberId)
-        
-        if (profile) {
-          memberProfiles.push({
-            userId: profile.uid,
-            username: profile.username,
-            avatar: (profile as any).avatar,
-            roles: userRoles,
-            isOnline: true
-          })
-        }
-      }
-      
-      setMembers(memberProfiles)
-      
-      if (displayRolesSeparately) {
-        organizeByRoles(memberProfiles)
-      }
-    } catch (error) {
-      console.error('Failed to load members:', error)
-    } finally {
-      setLoading(false)
-    }
-  }
-
-  const organizeByRoles = (memberList: Member[]) => {
+  const organizeByRoles = useCallback((memberList: Member[]): RoleGroup[] => {
     const roleMap = new Map<string, RoleGroup>()
+    const onlineMembers: Member[] = []
+    const offlineMembers: Member[] = []
     
     memberList.forEach(member => {
+      if (member.isOnline) {
+        onlineMembers.push(member)
+      } else {
+        offlineMembers.push(member)
+      }
+    })
+    
+    onlineMembers.forEach(member => {
       const highestRole = getHighestRole(member.roles)
       const roleId = highestRole.id
       
@@ -177,14 +84,183 @@ export default function MemberList({
       })
     }
     
+    if (offlineMembers.length > 0) {
+      sortedGroups.push({
+        role: {
+          id: 'offline',
+          name: 'Offline',
+          color: '#747F8D',
+          permissions: [],
+          position: -1,
+          mentionable: false,
+          createdAt: new Date()
+        },
+        members: offlineMembers.sort((a, b) => a.username.localeCompare(b.username))
+      })
+    }
+    
     sortedGroups.forEach(group => {
-      group.members.sort((a, b) => a.username.localeCompare(b.username))
+      if (group.role.name !== 'Offline') {
+        group.members.sort((a, b) => a.username.localeCompare(b.username))
+      }
     })
     
-    setRoleGroups(sortedGroups)
-  }
+    return sortedGroups
+  }, [])
 
-  const getHighestRole = (roles: Role[]): Role => {
+  const roleGroups = useMemo(() => {
+    if (!displayRolesSeparately) return []
+    return organizeByRoles(members)
+  }, [members, displayRolesSeparately, organizeByRoles])
+
+  const loadMembersData = useCallback(async () => {
+    if (!serverId || !serverMembers.length) return
+    
+    setLoading(true)
+    try {
+      const memberProfiles: Member[] = []
+      const batchSize = 10
+      
+      for (let i = 0; i < serverMembers.length; i += batchSize) {
+        const batch = serverMembers.slice(i, i + batchSize)
+        
+        const batchPromises = batch.map(async (memberId) => {
+          try {
+            const [profile, userRoles, presence] = await Promise.all([
+              authService.getUserProfile(memberId),
+              serverService.getUserRoles(serverId, memberId),
+              presenceService.getUserPresence(memberId)
+            ])
+            
+            if (profile) {
+              const member: Member = {
+                userId: profile.uid,
+                username: profile.username,
+                avatar: (profile as any).avatar,
+                roles: userRoles,
+                isOnline: presence?.isOnline || false,
+                lastSeen: presence?.lastSeen || new Date()
+              }
+              return member
+            }
+          } catch (error) {
+            console.error(`Failed to load member ${memberId}:`, error)
+          }
+          return null
+        })
+        
+        const batchResults = await Promise.all(batchPromises)
+        const validMembers = batchResults.filter(member => member !== null) as Member[]
+        memberProfiles.push(...validMembers)
+      }
+      
+      setMembers(memberProfiles)
+    } catch (error) {
+      console.error('Failed to load members:', error)
+    } finally {
+      setLoading(false)
+    }
+  }, [serverId, serverMembers])
+
+  useEffect(() => {
+    if (isOpen && serverId && serverMembers.length > 0) {
+      loadMembersData()
+    }
+  }, [isOpen, serverId, serverMembers.length, refreshTrigger, loadMembersData])
+
+  useEffect(() => {
+    if (!serverId || !isOpen) return
+
+    const unsubscribeRoleUpdates = roleSyncService.onRoleUpdate((update) => {
+      if (update.serverId === serverId) {
+        setMembers(prevMembers => 
+          prevMembers.map(member => 
+            member.userId === update.userId 
+              ? { ...member, roles: update.roles }
+              : member
+          )
+        )
+      }
+    })
+
+    const unsubscribePresence = presenceService.subscribeToMultipleUsersPresence(
+      serverMembers,
+      (presences) => {
+        setMembers(prevMembers => 
+          prevMembers.map(member => {
+            const presence = presences.get(member.userId)
+            return presence 
+              ? { 
+                  ...member, 
+                  isOnline: presence.isOnline,
+                  lastSeen: presence.lastSeen
+                }
+              : { ...member, isOnline: false, lastSeen: new Date() }
+          })
+        )
+      }
+    )
+
+    return () => {
+      unsubscribeRoleUpdates()
+      unsubscribePresence()
+    }
+  }, [serverId, isOpen, serverMembers])
+
+  const loadMembers = useCallback(async () => {
+    if (!serverId || !serverMembers.length) return
+    
+    setLoading(true)
+    try {
+      const memberProfiles: Member[] = []
+      const batchSize = 10
+      
+      for (let i = 0; i < serverMembers.length; i += batchSize) {
+  const batch = serverMembers.slice(i, i + batchSize)
+  const batchPromises = batch.map(async (memberId) => {
+    try {
+      const [profile, userRoles, presence] = await Promise.all([
+        authService.getUserProfile(memberId),
+        serverService.getUserRoles(serverId, memberId),
+        presenceService.getUserPresence(memberId)
+      ])
+
+      if (profile) {
+        return {
+          userId: profile.uid,
+          username: profile.username,
+          avatar: (profile as any).avatar,
+          roles: userRoles,
+          isOnline: presence?.isOnline || false,
+          lastSeen: presence?.lastSeen || new Date()
+        }
+      }
+    } catch (error) {
+      console.error(`Failed to load member ${memberId}:`, error)
+    }
+    return null
+  })
+
+
+  const batchResults = await Promise.allSettled(batchPromises)
+
+  batchResults.forEach((result: PromiseSettledResult<Member | null>) => {
+    if (result.status === 'fulfilled' && result.value) {
+      memberProfiles.push(result.value)
+    }
+  })
+}
+
+      
+      setMembers(memberProfiles)
+    } catch (error) {
+      console.error('Failed to load members:', error)
+    } finally {
+      setLoading(false)
+    }
+  }, [serverId, serverMembers])
+
+  const getHighestRole = useCallback((roles: Role[]): Role => {
     const nonEveryoneRoles = roles.filter(role => role.name !== '@everyone')
     if (nonEveryoneRoles.length === 0) {
       return roles.find(role => role.name === '@everyone') || roles[0]
@@ -193,18 +269,42 @@ export default function MemberList({
     return nonEveryoneRoles.reduce((highest, current) => 
       current.position > highest.position ? current : highest
     )
-  }
+  }, [])
 
-  const getMemberCount = () => {
+  const getMemberCount = useMemo(() => {
     if (displayRolesSeparately) {
-      return roleGroups.reduce((total, group) => total + group.members.length, 0)
+      const onlineCount = roleGroups
+        .filter(group => group.role.name !== 'Offline')
+        .reduce((total, group) => total + group.members.length, 0)
+      const offlineCount = roleGroups
+        .find(group => group.role.name === 'Offline')?.members.length || 0
+      return { online: onlineCount, offline: offlineCount, total: onlineCount + offlineCount }
     }
-    return members.filter(m => m.isOnline).length
-  }
+    return { 
+      online: members.filter(m => m.isOnline).length, 
+      offline: members.filter(m => !m.isOnline).length,
+      total: members.length 
+    }
+  }, [displayRolesSeparately, roleGroups, members])
 
-  const renderMemberItem = (member: Member) => {
+  const formatLastSeen = useCallback((lastSeen: Date): string => {
+    const now = new Date()
+    const diffMs = now.getTime() - lastSeen.getTime()
+    const diffMins = Math.floor(diffMs / (1000 * 60))
+    const diffHours = Math.floor(diffMs / (1000 * 60 * 60))
+    const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24))
+
+    if (diffMins < 1) return 'Just now'
+    if (diffMins < 60) return `${diffMins}m ago`
+    if (diffHours < 24) return `${diffHours}h ago`
+    if (diffDays < 7) return `${diffDays}d ago`
+    return lastSeen.toLocaleDateString()
+  }, [])
+
+  const renderMemberItem = useCallback((member: Member) => {
     const highestRole = getHighestRole(member.roles)
-    const memberColor = highestRole.color || '#99AAB5'
+    const memberColor = member.isOnline ? (highestRole.color || '#99AAB5') : '#747F8D'
+    const statusColor = member.isOnline ? 'bg-green-500' : 'bg-gray-500'
     
     return (
       <div 
@@ -227,14 +327,19 @@ export default function MemberList({
               </span>
             )}
           </div>
-          <div className={`absolute ${isMobile ? '-bottom-1 -right-1 w-4 h-4' : '-bottom-0.5 -right-0.5 w-3 h-3'} bg-green-500 border-2 border-gray-800 rounded-full`}></div>
+          <div className={`absolute ${isMobile ? '-bottom-1 -right-1 w-4 h-4' : '-bottom-0.5 -right-0.5 w-3 h-3'} ${statusColor} border-2 border-gray-800 rounded-full`}></div>
         </div>
         <div className="flex-1 min-w-0">
           <p className={`font-medium truncate ${isMobile ? 'text-base' : 'text-sm'}`}
              style={{ color: memberColor }}>
             {member.username}
           </p>
-          {!displayRolesSeparately && member.roles.length > 0 && (
+          {!member.isOnline && (
+            <p className={`text-gray-500 truncate ${isMobile ? 'text-sm' : 'text-xs'}`}>
+              Last seen {formatLastSeen(member.lastSeen)}
+            </p>
+          )}
+          {!displayRolesSeparately && member.roles.length > 0 && member.isOnline && (
             <p className={`text-gray-400 truncate ${isMobile ? 'text-sm' : 'text-xs'}`}>
               {member.roles
                 .filter(role => role.name !== '@everyone')
@@ -252,16 +357,18 @@ export default function MemberList({
         </div>
       </div>
     )
-  }
+  }, [isMobile, onUserClick, getHighestRole, formatLastSeen, displayRolesSeparately])
 
   if (!isOpen) return null
+
+  const memberCount = getMemberCount
 
   if (isMobile) {
     return (
       <div className="fixed inset-0 bg-gray-800 z-50 flex flex-col">
         <div className="flex items-center justify-between p-4 border-b border-gray-700">
           <h2 className="text-lg font-semibold text-white flex items-center space-x-2">
-            <span>Members — {getMemberCount()}</span>
+            <span>Members — {memberCount.total}</span>
             {loading && (
               <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
             )}
@@ -299,17 +406,32 @@ export default function MemberList({
                   </div>
                 ))
               ) : (
-                <div>
-                  <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-2">
-                    Online — {members.filter(m => m.isOnline).length}
-                  </h3>
-                  <div className="space-y-2">
-                    {members
-                      .filter(m => m.isOnline)
-                      .sort((a, b) => a.username.localeCompare(b.username))
-                      .map(renderMemberItem)}
+                <>
+                  <div>
+                    <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-2">
+                      Online — {memberCount.online}
+                    </h3>
+                    <div className="space-y-2">
+                      {members
+                        .filter(m => m.isOnline)
+                        .sort((a, b) => a.username.localeCompare(b.username))
+                        .map(renderMemberItem)}
+                    </div>
                   </div>
-                </div>
+                  {memberCount.offline > 0 && (
+                    <div>
+                      <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-2">
+                        Offline — {memberCount.offline}
+                      </h3>
+                      <div className="space-y-2">
+                        {members
+                          .filter(m => !m.isOnline)
+                          .sort((a, b) => a.username.localeCompare(b.username))
+                          .map(renderMemberItem)}
+                      </div>
+                    </div>
+                  )}
+                </>
               )}
             </div>
           )}
@@ -323,7 +445,7 @@ export default function MemberList({
       <div className="p-4 border-b border-gray-700">
         <div className="flex items-center justify-between">
           <h2 className="text-sm font-semibold text-white flex items-center space-x-2">
-            <span>Members — {getMemberCount()}</span>
+            <span>Members — {memberCount.total}</span>
             {loading && (
               <div className="w-3 h-3 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
             )}
@@ -362,17 +484,32 @@ export default function MemberList({
                 </div>
               ))
             ) : (
-              <div>
-                <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-1 px-2">
-                  Online — {members.filter(m => m.isOnline).length}
-                </h3>
-                <div className="space-y-1">
-                  {members
-                    .filter(m => m.isOnline)
-                    .sort((a, b) => a.username.localeCompare(b.username))
-                    .map(renderMemberItem)}
+              <>
+                <div>
+                  <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-1 px-2">
+                    Online — {memberCount.online}
+                  </h3>
+                  <div className="space-y-1">
+                    {members
+                      .filter(m => m.isOnline)
+                      .sort((a, b) => a.username.localeCompare(b.username))
+                      .map(renderMemberItem)}
+                  </div>
                 </div>
-              </div>
+                {memberCount.offline > 0 && (
+                  <div>
+                    <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-1 px-2">
+                      Offline — {memberCount.offline}
+                    </h3>
+                    <div className="space-y-1">
+                      {members
+                        .filter(m => !m.isOnline)
+                        .sort((a, b) => a.username.localeCompare(b.username))
+                        .map(renderMemberItem)}
+                    </div>
+                  </div>
+                )}
+              </>
             )}
           </div>
         )}

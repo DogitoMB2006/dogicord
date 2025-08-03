@@ -7,6 +7,7 @@ import { auth } from '../config/firebase'
 import { authService } from '../services/authService'
 import { profileService } from '../services/profileService'
 import { roleSyncService } from '../services/roleSyncService'
+import { presenceService } from '../services/presenceService'
 import type { UserProfile } from '../services/authService'
 import type { Role } from '../types/permissions'
 
@@ -49,12 +50,15 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
         try {
           const profile = await authService.getUserProfile(user.uid)
           setUserProfile(profile)
+          
+          presenceService.initialize(user.uid)
         } catch (error) {
           console.error('Error loading user profile:', error)
         }
       } else {
         setUserProfile(null)
         roleSyncService.cleanup()
+        presenceService.cleanup()
       }
       
       setLoading(false)
@@ -63,6 +67,7 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
     return () => {
       unsubscribeAuth()
       roleSyncService.cleanup()
+      presenceService.cleanup()
     }
   }, [])
 
@@ -70,16 +75,25 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
     const user = await authService.register(email, username, password)
     const profile = await authService.getUserProfile(user.uid)
     setUserProfile(profile)
+    
+    presenceService.initialize(user.uid)
   }
 
   const login = async (usernameOrEmail: string, password: string) => {
     const user = await authService.login(usernameOrEmail, password)
     const profile = await authService.getUserProfile(user.uid)
     setUserProfile(profile)
+    
+    presenceService.initialize(user.uid)
   }
 
   const logout = async () => {
+    if (currentUser) {
+      presenceService.setOffline(currentUser.uid)
+    }
+    
     roleSyncService.cleanup()
+    presenceService.cleanup()
     await authService.logout()
     setUserProfile(null)
   }
