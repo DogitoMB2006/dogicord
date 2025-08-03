@@ -1,3 +1,4 @@
+// src/services/roleSyncService.ts
 import { doc, onSnapshot, collection, query, where } from 'firebase/firestore'
 import { db } from '../config/firebase'
 import type { Role } from '../types/permissions'

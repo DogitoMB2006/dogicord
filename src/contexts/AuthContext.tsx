@@ -1,3 +1,4 @@
+// src/contexts/AuthContext.tsx
 import { createContext, useContext, useEffect, useState } from 'react'
 import type { ReactNode } from 'react'
 import { onAuthStateChanged } from 'firebase/auth'
@@ -59,18 +60,11 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
       setLoading(false)
     })
 
-    const unsubscribeRoleUpdates = roleSyncService.onRoleUpdate((update) => {
-      if (currentUser && update.userId === currentUser.uid) {
-        console.log('Role update detected for current user:', update)
-      }
-    })
-
     return () => {
       unsubscribeAuth()
-      unsubscribeRoleUpdates()
       roleSyncService.cleanup()
     }
-  }, [currentUser])
+  }, [])
 
   const register = async (email: string, username: string, password: string) => {
     const user = await authService.register(email, username, password)
