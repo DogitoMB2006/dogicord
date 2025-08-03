@@ -1,8 +1,10 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { useServer } from '../contexts/ServerContext'
 import { useAuth } from '../contexts/AuthContext'
 import { messageService } from '../services/messageService'
 import { serverService } from '../services/serverService'
+import { permissionService } from '../services/permissionService'
+import { roleSyncService } from '../services/roleSyncService'
 import type { Server } from '../services/serverService'
 import ServerSidebar from '../components/ui/ServerSidebar'
 import ServerModal from '../components/ui/ServerModal'
@@ -18,7 +20,7 @@ import type { Role } from '../types/permissions'
 type MobileView = 'servers' | 'channels' | 'chat'
 
 export default function Home() {
-  const { currentUser, userProfile, updateUserProfile } = useAuth()
+  const { currentUser, userProfile, updateUserProfile, getUserRolesRealtime, forceRefreshRoles } = useAuth()
   const { 
     servers, 
     activeServerId, 
@@ -50,6 +52,9 @@ export default function Home() {
   const [selectedUserId, setSelectedUserId] = useState<string | null>(null)
   const [showUserProfile, setShowUserProfile] = useState(false)
   const [refreshTrigger, setRefreshTrigger] = useState(0)
+  const [canSendMessages, setCanSendMessages] = useState(true)
+  const [sendMessageError, setSendMessageError] = useState('')
+  const [roleChangeNotification, setRoleChangeNotification] = useState<string | null>(null)
 
   useEffect(() => {
     const checkMobile = () => {
@@ -62,7 +67,7 @@ export default function Home() {
   }, [])
 
   useEffect(() => {
-    if (!activeServerId || !activeChannelId) {
+    if (!activeServerId || !activeChannelId || !currentUser) {
       setMessages([])
       return
     }
@@ -72,11 +77,12 @@ export default function Home() {
       activeChannelId,
       (newMessages) => {
         setMessages(newMessages)
-      }
+      },
+      currentUser.uid
     )
 
     return unsubscribe
-  }, [activeServerId, activeChannelId])
+  }, [activeServerId, activeChannelId, currentUser])
 
   useEffect(() => {
     if (activeServer) {
@@ -87,28 +93,104 @@ export default function Home() {
     }
   }, [activeServer])
 
-  useEffect(() => {
-    if (activeServerId && currentUser) {
-      loadUserRoles()
-    }
-  }, [activeServerId, currentUser])
-
-  const loadUserRoles = async () => {
-    if (!activeServerId || !currentUser) return
+  const updateUserRoles = useCallback((newRoles: Role[]) => {
+    const oldRoleNames = userRoles.map(r => r.name).sort()
+    const newRoleNames = newRoles.map(r => r.name).sort()
     
+    if (JSON.stringify(oldRoleNames) !== JSON.stringify(newRoleNames)) {
+      const addedRoles = newRoles.filter(newRole => 
+        !userRoles.some(oldRole => oldRole.id === newRole.id)
+      )
+      const removedRoles = userRoles.filter(oldRole => 
+        !newRoles.some(newRole => newRole.id === oldRole.id)
+      )
+      
+      if (addedRoles.length > 0 || removedRoles.length > 0) {
+        let notification = ''
+        if (addedRoles.length > 0) {
+          notification += `Added roles: ${addedRoles.map(r => r.name).join(', ')}`
+        }
+        if (removedRoles.length > 0) {
+          if (notification) notification += ' | '
+          notification += `Removed roles: ${removedRoles.map(r => r.name).join(', ')}`
+        }
+        
+        setRoleChangeNotification(notification)
+        setTimeout(() => setRoleChangeNotification(null), 5000)
+        
+        if (removedRoles.some(role => role.permissions.includes('manage_server'))) {
+          setIsServerSettingsOpen(false)
+        }
+      }
+    }
+    
+    setUserRoles(newRoles)
+  }, [userRoles])
+
+  useEffect(() => {
+    if (!activeServerId || !currentUser) {
+      setUserRoles([])
+      return
+    }
+
+    const unsubscribeRoles = getUserRolesRealtime(activeServerId, updateUserRoles)
+    
+    return () => {
+      unsubscribeRoles()
+    }
+  }, [activeServerId, currentUser, getUserRolesRealtime, updateUserRoles])
+
+  useEffect(() => {
+    if (activeServerId && activeChannelId && currentUser && userRoles.length > 0) {
+      checkMessagePermissions()
+    }
+  }, [activeServerId, activeChannelId, currentUser, userRoles])
+
+  const checkMessagePermissions = async () => {
+    if (!activeServerId || !activeChannelId || !currentUser) return
+
     try {
-      const roles = await serverService.getUserRoles(activeServerId, currentUser.uid)
-      setUserRoles(roles)
+      const result = await messageService.canUserSendMessage(
+        currentUser.uid,
+        activeServerId,
+        activeChannelId
+      )
+      
+      setCanSendMessages(result.canSend)
+      setSendMessageError(result.reason || '')
     } catch (error) {
-      console.error('Failed to load user roles:', error)
+      console.error('Failed to check message permissions:', error)
+      setCanSendMessages(false)
+      setSendMessageError('Failed to check permissions')
     }
   }
 
+  const isOwner = (): boolean => {
+    return activeServer?.ownerId === currentUser?.uid
+  }
+
   const hasPermission = (permission: string): boolean => {
-    return userRoles.some(role => 
-      role.permissions.includes('administrator') || 
-      role.permissions.includes(permission)
-    )
+    return roleSyncService.checkPermissionRealtime(userRoles, permission, isOwner())
+  }
+
+  const canManageServer = (): boolean => {
+    return hasPermission('manage_server') || isOwner()
+  }
+
+  const canManageChannels = (): boolean => {
+    return hasPermission('manage_channels') || isOwner()
+  }
+
+  const canManageRoles = (): boolean => {
+    return hasPermission('manage_roles') || isOwner()
+  }
+
+  const canManageMessages = (): boolean => {
+    return hasPermission('manage_messages') || isOwner()
+  }
+
+  const canViewMemberList = (): boolean => {
+    return hasPermission('view_member_list') || isOwner()
   }
 
   const handleCreateServer = async (serverName: string) => {
@@ -138,12 +220,41 @@ export default function Home() {
     if (isMobile) setMobileView('channels')
   }
 
-  const handleChannelSelect = (channelId: string) => {
-    setActiveChannelId(channelId)
-    localStorage.setItem('dogicord-active-channel', channelId)
-    if (isMobile) {
-      setMobileView('chat')
-      setShowMobileNav(false)
+  const handleChannelSelect = async (channelId: string) => {
+    if (!activeServer || !currentUser) return
+
+    const channel = activeServer.channels.find(ch => ch.id === channelId)
+    if (!channel) return
+
+    try {
+      const hasPermission = await roleSyncService.validateUserAction(
+        currentUser.uid,
+        activeServer.id,
+        'view_channels'
+      )
+
+      if (!hasPermission) {
+        const viewPermCheck = permissionService.hasChannelPermission(
+          userRoles,
+          channel,
+          'view_channel',
+          isOwner()
+        )
+
+        if (!viewPermCheck.allowed) {
+          setError('You do not have permission to view this channel')
+          return
+        }
+      }
+
+      setActiveChannelId(channelId)
+      localStorage.setItem('dogicord-active-channel', channelId)
+      if (isMobile) {
+        setMobileView('chat')
+        setShowMobileNav(false)
+      }
+    } catch (error) {
+      setError('Failed to verify channel permissions')
     }
   }
 
@@ -152,7 +263,18 @@ export default function Home() {
       return
     }
 
+    if (!canSendMessages) {
+      setError(sendMessageError || 'You cannot send messages in this channel')
+      return
+    }
+
     try {
+      const validation = await messageService.validateMessageContent(content, userRoles, isOwner())
+      if (!validation.valid) {
+        setError(validation.reason || 'Invalid message content')
+        return
+      }
+
       await messageService.sendMessage(
         content,
         currentUser.uid,
@@ -161,13 +283,20 @@ export default function Home() {
         activeServerId,
         activeChannelId
       )
-    } catch (error) {
-      console.error('Error sending message:', error)
+      
+      setError('')
+    } catch (error: any) {
+      setError(error.message)
     }
   }
 
   const handleUpdateServer = async (updates: Partial<Server>) => {
     if (!activeServerId) return
+    
+    if (updates.name && !canManageServer()) {
+      setError('You do not have permission to manage server settings')
+      return
+    }
     
     try {
       await serverService.updateServer(activeServerId, updates)
@@ -179,6 +308,11 @@ export default function Home() {
   }
 
   const handleToggleMemberList = () => {
+    if (!canViewMemberList()) {
+      setError('You do not have permission to view the member list')
+      return
+    }
+
     if (isMobile) {
       setShowMobileMemberList(!showMobileMemberList)
     } else {
@@ -195,10 +329,33 @@ export default function Home() {
 
   const handleRoleUpdate = async () => {
     if (activeServerId && currentUser) {
-      await loadUserRoles()
+      try {
+        await forceRefreshRoles(activeServerId)
+      } catch (error) {
+        console.error('Failed to refresh roles:', error)
+      }
     }
     await refreshServers()
     setRefreshTrigger(prev => prev + 1)
+  }
+
+  const handleLeaveServer = async () => {
+    if (!activeServerId || !currentUser) return
+    
+    if (isOwner()) {
+      setError('You cannot leave a server you own. Transfer ownership first.')
+      return
+    }
+
+    if (confirm('Are you sure you want to leave this server?')) {
+      try {
+        await refreshServers()
+        if (isMobile) setMobileView('servers')
+      } catch (error) {
+        console.error('Failed to leave server:', error)
+        setError('Failed to leave server')
+      }
+    }
   }
 
   const renderMobileNavigation = () => {
@@ -317,14 +474,22 @@ export default function Home() {
           <div className={`${mobileView === 'channels' ? 'block' : 'hidden'} h-full`}>
             <ChannelSidebar
               serverName={activeServer.name}
-              channels={activeServer.channels}
+              channels={activeServer.channels.filter(ch => {
+                const viewPermCheck = permissionService.hasChannelPermission(
+                  userRoles,
+                  ch,
+                  'view_channel',
+                  isOwner()
+                )
+                return viewPermCheck.allowed
+              })}
               categories={activeServer.categories}
               activeChannelId={activeChannelId}
               onChannelSelect={handleChannelSelect}
-              onLeaveServer={() => {}}
+              onLeaveServer={handleLeaveServer}
               onOpenServerSettings={() => setIsServerSettingsOpen(true)}
               onOpenProfileModal={() => setIsProfileModalOpen(true)}
-              canManageServer={hasPermission('manage_server') || activeServer.ownerId === currentUser?.uid}
+              canManageServer={canManageServer()}
               isMobile={true}
               onBackToServers={() => setMobileView('servers')}
             />
@@ -346,7 +511,9 @@ export default function Home() {
               onToggleMemberList={handleToggleMemberList}
               onUserClick={handleUserClick}
               currentUserId={currentUser?.uid || ''}
-              canManageMessages={hasPermission('manage_messages')}
+              canManageMessages={canManageMessages()}
+              canSendMessages={canSendMessages}
+              sendMessageError={sendMessageError}
             />
           </div>
         </div>
@@ -357,14 +524,22 @@ export default function Home() {
       <div className="flex-1 flex">
         <ChannelSidebar
           serverName={activeServer.name}
-          channels={activeServer.channels}
+          channels={activeServer.channels.filter(ch => {
+            const viewPermCheck = permissionService.hasChannelPermission(
+              userRoles,
+              ch,
+              'view_channel',
+              isOwner()
+            )
+            return viewPermCheck.allowed
+          })}
           categories={activeServer.categories}
           activeChannelId={activeChannelId}
           onChannelSelect={handleChannelSelect}
-          onLeaveServer={() => {}}
+          onLeaveServer={handleLeaveServer}
           onOpenServerSettings={() => setIsServerSettingsOpen(true)}
           onOpenProfileModal={() => setIsProfileModalOpen(true)}
-          canManageServer={hasPermission('manage_server') || activeServer.ownerId === currentUser?.uid}
+          canManageServer={canManageServer()}
           isMobile={false}
         />
 
@@ -377,10 +552,12 @@ export default function Home() {
           onToggleMemberList={handleToggleMemberList}
           onUserClick={handleUserClick}
           currentUserId={currentUser?.uid || ''}
-          canManageMessages={hasPermission('manage_messages')}
+          canManageMessages={canManageMessages()}
+          canSendMessages={canSendMessages}
+          sendMessageError={sendMessageError}
         />
 
-        {showMemberList && (
+        {showMemberList && canViewMemberList() && (
           <MemberList
             serverId={activeServerId!}
             serverMembers={activeServer.members}
@@ -421,6 +598,33 @@ export default function Home() {
       {renderMainContent()}
       {renderMobileNavigation()}
 
+      {error && (
+        <div className="fixed top-4 right-4 bg-red-600 text-white px-4 py-2 rounded-lg shadow-lg z-50 max-w-sm">
+          <div className="flex items-center space-x-2">
+            <span className="text-sm">{error}</span>
+            <button
+              onClick={() => setError('')}
+              className="text-white hover:text-gray-200"
+            >
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </button>
+          </div>
+        </div>
+      )}
+
+      {roleChangeNotification && (
+        <div className="fixed top-4 left-1/2 transform -translate-x-1/2 bg-blue-600 text-white px-4 py-2 rounded-lg shadow-lg z-50 max-w-md">
+          <div className="flex items-center space-x-2">
+            <svg className="w-5 h-5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+            </svg>
+            <span className="text-sm font-medium">Roles Updated: {roleChangeNotification}</span>
+          </div>
+        </div>
+      )}
+
       <ServerModal
         isOpen={isModalOpen}
         onClose={() => {
@@ -456,7 +660,7 @@ export default function Home() {
         }}
       />
 
-      {showMobileMemberList && activeServer && (
+      {showMobileMemberList && activeServer && canViewMemberList() && (
         <MemberList
           serverId={activeServerId!}
           serverMembers={activeServer.members}
@@ -481,7 +685,7 @@ export default function Home() {
           isMobile={isMobile}
           currentUserId={currentUser?.uid}
           currentUserRoles={userRoles}
-          isOwner={activeServer?.ownerId === currentUser?.uid}
+          isOwner={isOwner()}
           onRoleUpdate={handleRoleUpdate}
         />
       )}

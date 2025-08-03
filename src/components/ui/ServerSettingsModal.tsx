@@ -1,9 +1,9 @@
-// src/components/ui/ServerSettingsModal.tsx
 import { useState, useRef } from 'react'
 import type { Server } from '../../services/serverService'
 import type { Role } from '../../types/permissions'
 import type { Channel, Category, ChannelPermission } from '../../types/channels'
 import { serverService } from '../../services/serverService'
+import { permissionService } from '../../services/permissionService'
 import RoleManager from '../server/RoleManager'
 import ChannelManager from '../server/ChannelManager'
 
@@ -16,7 +16,7 @@ interface ServerSettingsModalProps {
   currentUserId: string
 }
 
-type SettingsTab = 'general' | 'channels' | 'roles' | 'members'
+type SettingsTab = 'general' | 'channels' | 'roles' | 'members' | 'integrations' | 'safety'
 
 export default function ServerSettingsModal({ 
   isOpen, 
@@ -39,17 +39,33 @@ export default function ServerSettingsModal({
   if (!isOpen) return null
 
   const isOwner = server.ownerId === currentUserId
+  const { canAccess, availableTabs } = permissionService.canAccessServerSettings(userRoles, isOwner)
 
-  const hasPermission = (permission: string): boolean => {
-    if (isOwner) return true
-    return userRoles.some(role => 
-      role.permissions.includes('administrator') || 
-      role.permissions.includes(permission)
+  if (!canAccess) {
+    return (
+      <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+        <div className="bg-gray-800 rounded-2xl shadow-2xl p-6 w-full max-w-md">
+          <div className="text-center">
+            <h2 className="text-xl font-bold text-white mb-2">Access Denied</h2>
+            <p className="text-gray-400 mb-4">You don't have permission to access server settings.</p>
+            <button
+              onClick={onClose}
+              className="px-4 py-2 bg-gray-700 hover:bg-gray-600 text-white rounded-lg transition-colors"
+            >
+              Close
+            </button>
+          </div>
+        </div>
+      </div>
     )
   }
 
+  if (!availableTabs.includes(activeTab)) {
+    setActiveTab(availableTabs[0] as SettingsTab)
+  }
+
   const handleUpdateServerName = async () => {
-    if (serverName.trim() !== server.name && hasPermission('manage_server')) {
+    if (serverName.trim() !== server.name && permissionService.hasServerPermission(userRoles, 'manage_server', isOwner)) {
       setLoading(true)
       try {
         const updates: Partial<Server> = { name: serverName.trim() }
@@ -79,7 +95,7 @@ export default function ServerSettingsModal({
   }
 
   const handleUpdateServerIcon = async () => {
-    if (selectedIcon && hasPermission('manage_server')) {
+    if (selectedIcon && permissionService.hasServerPermission(userRoles, 'manage_server', isOwner)) {
       setLoading(true)
       try {
         if (server.icon) {
@@ -192,6 +208,11 @@ export default function ServerSettingsModal({
 
   const handleCreateRole = async (name: string, color: string, permissions: string[]) => {
     try {
+      const validation = permissionService.validateRolePermissions(userRoles, permissions, isOwner)
+      if (!validation.valid) {
+        throw new Error(`You cannot assign these permissions: ${validation.invalidPermissions.join(', ')}`)
+      }
+      
       await serverService.createRole(server.id, name, color, permissions)
       window.location.reload()
     } catch (error: any) {
@@ -201,6 +222,13 @@ export default function ServerSettingsModal({
 
   const handleUpdateRole = async (roleId: string, updates: Partial<Role>) => {
     try {
+      if (updates.permissions) {
+        const validation = permissionService.validateRolePermissions(userRoles, updates.permissions, isOwner)
+        if (!validation.valid) {
+          throw new Error(`You cannot assign these permissions: ${validation.invalidPermissions.join(', ')}`)
+        }
+      }
+      
       await serverService.updateRole(server.id, roleId, updates)
       window.location.reload()
     } catch (error: any) {
@@ -256,18 +284,21 @@ export default function ServerSettingsModal({
                 type="text"
                 value={serverName}
                 onChange={(e) => setServerName(e.target.value)}
-                disabled={!hasPermission('manage_server') || loading}
+                disabled={!permissionService.hasServerPermission(userRoles, 'manage_server', isOwner) || loading}
                 className="flex-1 px-3 py-2 md:px-4 md:py-2 bg-gray-700 border border-gray-600 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-slate-500 disabled:bg-gray-800 disabled:cursor-not-allowed text-sm md:text-base"
                 maxLength={50}
               />
               <button
                 onClick={handleUpdateServerName}
-                disabled={serverName.trim() === server.name && !selectedIcon || !hasPermission('manage_server') || loading}
+                disabled={serverName.trim() === server.name && !selectedIcon || !permissionService.hasServerPermission(userRoles, 'manage_server', isOwner) || loading}
                 className="px-4 py-2 bg-green-600 hover:bg-green-700 disabled:bg-gray-600 disabled:cursor-not-allowed text-white rounded-lg transition-colors text-sm md:text-base"
               >
                 {loading ? 'Saving...' : 'Save'}
               </button>
             </div>
+            {!permissionService.hasServerPermission(userRoles, 'manage_server', isOwner) && (
+              <p className="text-xs text-yellow-400 mt-1">You don't have permission to manage server settings</p>
+            )}
           </div>
 
           <div>
@@ -291,7 +322,7 @@ export default function ServerSettingsModal({
               <div className="flex flex-col space-y-2">
                 <button
                   onClick={() => fileInputRef.current?.click()}
-                  disabled={!hasPermission('manage_server') || loading}
+                  disabled={!permissionService.hasServerPermission(userRoles, 'manage_server', isOwner) || loading}
                   className="px-3 py-2 md:px-4 md:py-2 bg-slate-600 hover:bg-slate-700 disabled:bg-gray-600 disabled:cursor-not-allowed text-white rounded-lg transition-colors text-sm md:text-base"
                 >
                   Upload Image
@@ -345,10 +376,36 @@ export default function ServerSettingsModal({
               />
               <button 
                 onClick={copyInviteCode}
-                className="px-4 py-2 bg-slate-600 hover:bg-slate-700 text-white rounded-lg transition-colors text-sm md:text-base"
+                disabled={!permissionService.canCreateInvite(userRoles, isOwner)}
+                className="px-4 py-2 bg-slate-600 hover:bg-slate-700 disabled:bg-gray-600 disabled:cursor-not-allowed text-white rounded-lg transition-colors text-sm md:text-base"
               >
                 Copy
               </button>
+            </div>
+            {!permissionService.canCreateInvite(userRoles, isOwner) && (
+              <p className="text-xs text-yellow-400 mt-1">You don't have permission to create invites</p>
+            )}
+          </div>
+
+          <div className="border-t border-gray-700 pt-4">
+            <h4 className="text-sm font-medium text-gray-300 mb-3">Server Information</h4>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
+              <div>
+                <p className="text-gray-400">Owner</p>
+                <p className="text-white">{isOwner ? 'You' : 'Another user'}</p>
+              </div>
+              <div>
+                <p className="text-gray-400">Members</p>
+                <p className="text-white">{server.members.length}</p>
+              </div>
+              <div>
+                <p className="text-gray-400">Channels</p>
+                <p className="text-white">{server.channels.length}</p>
+              </div>
+              <div>
+                <p className="text-gray-400">Roles</p>
+                <p className="text-white">{server.roles.length}</p>
+              </div>
             </div>
           </div>
         </div>
@@ -391,6 +448,7 @@ export default function ServerSettingsModal({
               type="checkbox"
               checked={displayRolesSeparately}
               onChange={handleToggleDisplayRoles}
+              disabled={!permissionService.hasServerPermission(userRoles, 'manage_server', isOwner)}
               className="w-4 h-4 text-blue-600 bg-gray-700 border-gray-600 rounded focus:ring-blue-500"
             />
             <span className={`text-gray-300 ${isMobile ? 'text-sm' : 'text-base'}`}>
@@ -413,60 +471,130 @@ export default function ServerSettingsModal({
     </div>
   )
 
+  const renderMembersSettings = () => (
+    <div className="space-y-4">
+      <h3 className={`font-semibold text-white ${isMobile ? 'text-lg' : 'text-lg'}`}>
+        Member Management
+      </h3>
+      
+      <div className="grid gap-4">
+        <div className="p-4 bg-gray-750 rounded-lg border border-gray-600">
+          <h4 className="font-medium text-white mb-2">Your Permissions</h4>
+          <div className="space-y-1 text-sm">
+            {permissionService.hasServerPermission(userRoles, 'kick_members', isOwner) && (
+              <p className="text-green-400">✓ Can kick members</p>
+            )}
+            {permissionService.hasServerPermission(userRoles, 'ban_members', isOwner) && (
+              <p className="text-green-400">✓ Can ban members</p>
+            )}
+            {permissionService.hasServerPermission(userRoles, 'timeout_members', isOwner) && (
+              <p className="text-green-400">✓ Can timeout members</p>
+            )}
+            {permissionService.hasServerPermission(userRoles, 'moderate_members', isOwner) && (
+              <p className="text-green-400">✓ Can moderate members</p>
+            )}
+            {permissionService.hasServerPermission(userRoles, 'manage_nicknames', isOwner) && (
+              <p className="text-green-400">✓ Can manage nicknames</p>
+            )}
+            {!permissionService.hasServerPermission(userRoles, 'kick_members', isOwner) &&
+             !permissionService.hasServerPermission(userRoles, 'ban_members', isOwner) &&
+             !permissionService.hasServerPermission(userRoles, 'timeout_members', isOwner) &&
+             !permissionService.hasServerPermission(userRoles, 'moderate_members', isOwner) &&
+             !permissionService.hasServerPermission(userRoles, 'manage_nicknames', isOwner) && (
+              <p className="text-gray-400">No member management permissions</p>
+            )}
+          </div>
+        </div>
+        
+        <div className="text-center py-8">
+          <p className="text-gray-400">Advanced member management coming soon...</p>
+        </div>
+      </div>
+    </div>
+  )
+
+  const renderIntegrationsSettings = () => (
+    <div className="space-y-4">
+      <h3 className={`font-semibold text-white ${isMobile ? 'text-lg' : 'text-lg'}`}>
+        Integrations
+      </h3>
+      
+      <div className="grid gap-4">
+        <div className="p-4 bg-gray-750 rounded-lg border border-gray-600">
+          <h4 className="font-medium text-white mb-2">Webhook Management</h4>
+          {permissionService.hasServerPermission(userRoles, 'manage_webhooks', isOwner) ? (
+            <p className="text-green-400 text-sm">✓ You can manage webhooks</p>
+          ) : (
+            <p className="text-red-400 text-sm">✗ You cannot manage webhooks</p>
+          )}
+        </div>
+        
+        <div className="text-center py-8">
+          <p className="text-gray-400">Webhooks and integrations coming soon...</p>
+        </div>
+      </div>
+    </div>
+  )
+
+  const renderSafetySettings = () => (
+    <div className="space-y-4">
+      <h3 className={`font-semibold text-white ${isMobile ? 'text-lg' : 'text-lg'}`}>
+        Safety Setup
+      </h3>
+      
+      <div className="grid gap-4">
+        <div className="p-4 bg-gray-750 rounded-lg border border-gray-600">
+          <h4 className="font-medium text-white mb-2">Audit Log Access</h4>
+          {permissionService.hasServerPermission(userRoles, 'view_audit_log', isOwner) ? (
+            <p className="text-green-400 text-sm">✓ You can view server audit logs</p>
+          ) : (
+            <p className="text-red-400 text-sm">✗ You cannot view server audit logs</p>
+          )}
+        </div>
+
+        <div className="p-4 bg-gray-750 rounded-lg border border-gray-600">
+          <h4 className="font-medium text-white mb-2">Moderation Tools</h4>
+          <div className="space-y-1 text-sm">
+            {permissionService.hasServerPermission(userRoles, 'moderate_members', isOwner) && (
+              <p className="text-green-400">✓ Full moderation access</p>
+            )}
+            {permissionService.hasServerPermission(userRoles, 'kick_members', isOwner) && (
+              <p className="text-green-400">✓ Can kick members</p>
+            )}
+            {permissionService.hasServerPermission(userRoles, 'ban_members', isOwner) && (
+              <p className="text-green-400">✓ Can ban members</p>
+            )}
+            {permissionService.hasServerPermission(userRoles, 'timeout_members', isOwner) && (
+              <p className="text-green-400">✓ Can timeout members</p>
+            )}
+          </div>
+        </div>
+        
+        <div className="text-center py-8">
+          <p className="text-gray-400">Advanced safety features coming soon...</p>
+        </div>
+      </div>
+    </div>
+  )
+
   const renderMobileNav = () => {
     if (!isMobile) return null
 
     return (
-      <div className="flex border-b border-gray-700 bg-gray-750">
-        <button
-          onClick={() => setActiveTab('general')}
-          className={`flex-1 py-3 px-2 text-xs font-medium transition-colors ${
-            activeTab === 'general'
-              ? 'text-white border-b-2 border-slate-500 bg-gray-800'
-              : 'text-gray-400 hover:text-gray-300'
-          }`}
-        >
-          General
-        </button>
-        
-        {hasPermission('manage_channels') && (
+      <div className="flex border-b border-gray-700 bg-gray-750 overflow-x-auto">
+        {availableTabs.map((tab) => (
           <button
-            onClick={() => setActiveTab('channels')}
-            className={`flex-1 py-3 px-2 text-xs font-medium transition-colors ${
-              activeTab === 'channels'
+            key={tab}
+            onClick={() => setActiveTab(tab as SettingsTab)}
+            className={`flex-shrink-0 py-3 px-4 text-xs font-medium transition-colors whitespace-nowrap ${
+              activeTab === tab
                 ? 'text-white border-b-2 border-slate-500 bg-gray-800'
                 : 'text-gray-400 hover:text-gray-300'
             }`}
           >
-            Channels
+            {tab.charAt(0).toUpperCase() + tab.slice(1)}
           </button>
-        )}
-        
-        {hasPermission('manage_roles') && (
-          <button
-            onClick={() => setActiveTab('roles')}
-            className={`flex-1 py-3 px-2 text-xs font-medium transition-colors ${
-              activeTab === 'roles'
-                ? 'text-white border-b-2 border-slate-500 bg-gray-800'
-                : 'text-gray-400 hover:text-gray-300'
-            }`}
-          >
-            Roles
-          </button>
-        )}
-        
-        {(hasPermission('kick_members') || hasPermission('ban_members')) && (
-          <button
-            onClick={() => setActiveTab('members')}
-            className={`flex-1 py-3 px-2 text-xs font-medium transition-colors ${
-              activeTab === 'members'
-                ? 'text-white border-b-2 border-slate-500 bg-gray-800'
-                : 'text-gray-400 hover:text-gray-300'
-            }`}
-          >
-            Members
-          </button>
-        )}
+        ))}
       </div>
     )
   }
@@ -482,55 +610,19 @@ export default function ServerSettingsModal({
         </div>
 
         <nav className="space-y-1">
-          <button
-            onClick={() => setActiveTab('general')}
-            className={`w-full text-left px-3 py-2 rounded-lg transition-colors ${
-              activeTab === 'general'
-                ? 'bg-slate-600 text-white'
-                : 'text-gray-300 hover:bg-gray-700 hover:text-white'
-            }`}
-          >
-            General
-          </button>
-          
-          {hasPermission('manage_channels') && (
+          {availableTabs.map((tab) => (
             <button
-              onClick={() => setActiveTab('channels')}
+              key={tab}
+              onClick={() => setActiveTab(tab as SettingsTab)}
               className={`w-full text-left px-3 py-2 rounded-lg transition-colors ${
-                activeTab === 'channels'
+                activeTab === tab
                   ? 'bg-slate-600 text-white'
                   : 'text-gray-300 hover:bg-gray-700 hover:text-white'
               }`}
             >
-              Channels
+              {tab.charAt(0).toUpperCase() + tab.slice(1)}
             </button>
-          )}
-          
-          {hasPermission('manage_roles') && (
-            <button
-              onClick={() => setActiveTab('roles')}
-              className={`w-full text-left px-3 py-2 rounded-lg transition-colors ${
-                activeTab === 'roles'
-                  ? 'bg-slate-600 text-white'
-                  : 'text-gray-300 hover:bg-gray-700 hover:text-white'
-              }`}
-            >
-              Roles
-            </button>
-          )}
-          
-          {(hasPermission('kick_members') || hasPermission('ban_members')) && (
-            <button
-              onClick={() => setActiveTab('members')}
-              className={`w-full text-left px-3 py-2 rounded-lg transition-colors ${
-                activeTab === 'members'
-                  ? 'bg-slate-600 text-white'
-                  : 'text-gray-300 hover:bg-gray-700 hover:text-white'
-              }`}
-            >
-              Members
-            </button>
-          )}
+          ))}
         </nav>
       </div>
     )
@@ -545,9 +637,13 @@ export default function ServerSettingsModal({
       case 'roles':
         return renderRolesSettings()
       case 'members':
-        return <div className="text-gray-400 text-center py-8">Member management coming soon...</div>
+        return renderMembersSettings()
+      case 'integrations':
+        return renderIntegrationsSettings()
+      case 'safety':
+        return renderSafetySettings()
       default:
-        return null
+        return <div className="text-gray-400 text-center py-8">This section is coming soon...</div>
     }
   }
 

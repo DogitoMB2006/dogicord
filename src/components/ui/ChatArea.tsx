@@ -17,6 +17,8 @@ interface ChatAreaProps {
   onUserClick?: (userId: string) => void
   currentUserId: string
   canManageMessages: boolean
+  canSendMessages?: boolean
+  sendMessageError?: string
 }
 
 export default function ChatArea({ 
@@ -31,7 +33,9 @@ export default function ChatArea({
   onToggleMemberList,
   onUserClick,
   currentUserId,
-  canManageMessages
+  canManageMessages,
+  canSendMessages = true,
+  sendMessageError = ''
 }: ChatAreaProps) {
   const [message, setMessage] = useState('')
   const [sending, setSending] = useState(false)
@@ -66,7 +70,7 @@ export default function ChatArea({
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
-    if (message.trim() && !sending) {
+    if (message.trim() && !sending && canSendMessages) {
       setSending(true)
       try {
         await onSendMessage(message.trim())
@@ -80,7 +84,7 @@ export default function ChatArea({
   }
 
   const handleGifSelect = async (gifUrl: string) => {
-    if (!sending) {
+    if (!sending && canSendMessages) {
       setSending(true)
       try {
         await onSendMessage(gifUrl)
@@ -104,7 +108,7 @@ export default function ChatArea({
 
   const handleDeleteMessage = async (messageId: string) => {
     try {
-      await messageService.deleteMessage(messageId, currentUserId, canManageMessages)
+      await messageService.deleteMessage(messageId, currentUserId)
     } catch (error) {
       console.error('Failed to delete message:', error)
       throw error
@@ -140,6 +144,16 @@ export default function ChatArea({
     const previousDate = new Date(previousMessage.timestamp).toDateString()
     
     return currentDate !== previousDate
+  }
+
+  const getMessageInputPlaceholder = (): string => {
+    if (!canSendMessages) {
+      if (sendMessageError) {
+        return sendMessageError
+      }
+      return 'You do not have permission to send messages'
+    }
+    return `Message #${channelName}`
   }
 
   return (
@@ -193,6 +207,11 @@ export default function ChatArea({
               </div>
               <h4 className={`${isMobile ? 'text-lg' : 'text-xl'} font-semibold text-white mb-2`}>Welcome to #{channelName}!</h4>
               <p className={`text-gray-400 ${isMobile ? 'text-sm' : 'text-base'}`}>This is the start of the #{channelName} channel.</p>
+              {!canSendMessages && sendMessageError && (
+                <div className="mt-4 p-3 bg-yellow-900/30 border border-yellow-700/50 rounded-lg">
+                  <p className="text-yellow-300 text-sm">{sendMessageError}</p>
+                </div>
+              )}
             </div>
           </div>
         ) : (
@@ -231,31 +250,41 @@ export default function ChatArea({
       </div>
 
       <div className={`${isMobile ? 'fixed bottom-0 left-0 right-0 bg-gray-700 border-t border-gray-600 z-20' : ''} p-2 md:p-4 ${isMobile ? 'pb-4' : ''} relative`}>
+        {!canSendMessages && sendMessageError && (
+          <div className="mb-2 p-2 bg-red-900/30 border border-red-700/50 rounded-lg">
+            <p className="text-red-300 text-sm">{sendMessageError}</p>
+          </div>
+        )}
+        
         <form onSubmit={handleSubmit}>
           <div className="relative">
             <input
               type="text"
               value={message}
               onChange={(e) => setMessage(e.target.value)}
-              placeholder={`Message #${channelName}`}
-              disabled={sending}
-              className={`w-full px-3 md:px-4 py-2 md:py-3 pr-16 md:pr-20 bg-gray-600 border-none rounded-lg text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-slate-500 disabled:bg-gray-700 disabled:cursor-not-allowed ${isMobile ? 'text-sm' : 'text-base'}`}
+              placeholder={getMessageInputPlaceholder()}
+              disabled={sending || !canSendMessages}
+              className={`w-full px-3 md:px-4 py-2 md:py-3 pr-16 md:pr-20 bg-gray-600 border-none rounded-lg text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-slate-500 disabled:bg-gray-700 disabled:cursor-not-allowed ${isMobile ? 'text-sm' : 'text-base'} ${
+                !canSendMessages ? 'opacity-60' : ''
+              }`}
               maxLength={2000}
             />
             <div className="absolute right-2 top-1/2 transform -translate-y-1/2 flex items-center space-x-1">
-              <button
-                type="button"
-                onClick={() => setShowGifSelector(!showGifSelector)}
-                disabled={sending}
-                className={`p-1 md:p-2 text-gray-400 hover:text-white disabled:text-gray-500 transition-colors`}
-              >
-                <svg className={`${isMobile ? 'w-4 h-4' : 'w-5 h-5'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 4V2a1 1 0 011-1h8a1 1 0 011 1v2m0 0V1a1 1 0 011-1h2a1 1 0 011 1v18a1 1 0 01-1 1H4a1 1 0 01-1-1V1a1 1 0 011-1h2a1 1 0 011 1v3m0 0h8m-8 0H5a1 1 0 00-1 1v3m0 0h16" />
-                </svg>
-              </button>
+              {canSendMessages && (
+                <button
+                  type="button"
+                  onClick={() => setShowGifSelector(!showGifSelector)}
+                  disabled={sending || !canSendMessages}
+                  className={`p-1 md:p-2 text-gray-400 hover:text-white disabled:text-gray-500 transition-colors`}
+                >
+                  <svg className={`${isMobile ? 'w-4 h-4' : 'w-5 h-5'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 4V2a1 1 0 011-1h8a1 1 0 011 1v2m0 0V1a1 1 0 011-1h2a1 1 0 011 1v18a1 1 0 01-1 1H4a1 1 0 01-1-1V1a1 1 0 011-1h2a1 1 0 011 1v3m0 0h8m-8 0H5a1 1 0 00-1 1v3m0 0h16" />
+                  </svg>
+                </button>
+              )}
               <button
                 type="submit"
-                disabled={!message.trim() || sending}
+                disabled={!message.trim() || sending || !canSendMessages}
                 className={`p-1 md:p-2 text-gray-400 hover:text-white disabled:text-gray-500 transition-colors`}
               >
                 {sending ? (
@@ -268,17 +297,22 @@ export default function ChatArea({
               </button>
             </div>
           </div>
-          <div className={`text-gray-500 mt-1 ${isMobile ? 'text-xs' : 'text-xs'}`}>
-            {message.length}/2000
-          </div>
+          
+          {canSendMessages && (
+            <div className={`text-gray-500 mt-1 ${isMobile ? 'text-xs' : 'text-xs'}`}>
+              {message.length}/2000
+            </div>
+          )}
         </form>
 
-        <GifSelector
-          isOpen={showGifSelector}
-          onClose={() => setShowGifSelector(false)}
-          onSelectGif={handleGifSelect}
-          isMobile={isMobile}
-        />
+        {canSendMessages && (
+          <GifSelector
+            isOpen={showGifSelector}
+            onClose={() => setShowGifSelector(false)}
+            onSelectGif={handleGifSelect}
+            isMobile={isMobile}
+          />
+        )}
       </div>
     </div>
   )

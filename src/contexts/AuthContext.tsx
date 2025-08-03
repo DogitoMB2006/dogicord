@@ -5,7 +5,9 @@ import type { User } from 'firebase/auth'
 import { auth } from '../config/firebase'
 import { authService } from '../services/authService'
 import { profileService } from '../services/profileService'
+import { roleSyncService } from '../services/roleSyncService'
 import type { UserProfile } from '../services/authService'
+import type { Role } from '../types/permissions'
 
 interface AuthContextType {
   currentUser: User | null
@@ -15,6 +17,8 @@ interface AuthContextType {
   login: (usernameOrEmail: string, password: string) => Promise<void>
   logout: () => Promise<void>
   updateUserProfile: (updates: { username?: string, avatar?: File }) => Promise<void>
+  getUserRolesRealtime: (serverId: string, callback: (roles: Role[]) => void) => () => void
+  forceRefreshRoles: (serverId: string) => Promise<Role[]>
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined)
@@ -36,6 +40,38 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
   const [userProfile, setUserProfile] = useState<UserProfile | null>(null)
   const [loading, setLoading] = useState(true)
 
+  useEffect(() => {
+    const unsubscribeAuth = onAuthStateChanged(auth, async (user) => {
+      setCurrentUser(user)
+      
+      if (user) {
+        try {
+          const profile = await authService.getUserProfile(user.uid)
+          setUserProfile(profile)
+        } catch (error) {
+          console.error('Error loading user profile:', error)
+        }
+      } else {
+        setUserProfile(null)
+        roleSyncService.cleanup()
+      }
+      
+      setLoading(false)
+    })
+
+    const unsubscribeRoleUpdates = roleSyncService.onRoleUpdate((update) => {
+      if (currentUser && update.userId === currentUser.uid) {
+        console.log('Role update detected for current user:', update)
+      }
+    })
+
+    return () => {
+      unsubscribeAuth()
+      unsubscribeRoleUpdates()
+      roleSyncService.cleanup()
+    }
+  }, [currentUser])
+
   const register = async (email: string, username: string, password: string) => {
     const user = await authService.register(email, username, password)
     const profile = await authService.getUserProfile(user.uid)
@@ -49,6 +85,7 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
   }
 
   const logout = async () => {
+    roleSyncService.cleanup()
     await authService.logout()
     setUserProfile(null)
   }
@@ -90,22 +127,27 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
     }
   }
 
-  useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, async (user) => {
-      setCurrentUser(user)
-      
-      if (user) {
-        const profile = await authService.getUserProfile(user.uid)
-        setUserProfile(profile)
-      } else {
-        setUserProfile(null)
-      }
-      
-      setLoading(false)
-    })
+  const getUserRolesRealtime = (serverId: string, callback: (roles: Role[]) => void): (() => void) => {
+    if (!currentUser) {
+      callback([])
+      return () => {}
+    }
 
-    return unsubscribe
-  }, [])
+    return roleSyncService.subscribeToUserRoles(currentUser.uid, serverId, callback)
+  }
+
+  const forceRefreshRoles = async (serverId: string): Promise<Role[]> => {
+    if (!currentUser) {
+      return []
+    }
+
+    try {
+      return await roleSyncService.forceRefreshUserPermissions(currentUser.uid, serverId)
+    } catch (error) {
+      console.error('Error refreshing roles:', error)
+      return []
+    }
+  }
 
   const value: AuthContextType = {
     currentUser,
@@ -114,7 +156,9 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
     register,
     login,
     logout,
-    updateUserProfile
+    updateUserProfile,
+    getUserRolesRealtime,
+    forceRefreshRoles
   }
 
   return (

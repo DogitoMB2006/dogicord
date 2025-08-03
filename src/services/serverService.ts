@@ -1,4 +1,3 @@
-
 import { 
   collection, 
   doc, 
@@ -10,10 +9,12 @@ import {
   arrayUnion, 
   updateDoc,
   orderBy,
-  serverTimestamp
+  serverTimestamp,
+  addDoc
 } from 'firebase/firestore'
 import { ref, uploadBytes, getDownloadURL, deleteObject, getStorage } from 'firebase/storage'
 import { db } from '../config/firebase'
+import { roleSyncService } from './roleSyncService'
 import type { Role } from '../types/permissions'
 import type { Channel, Category, ChannelPermission } from '../types/channels'
 import { DEFAULT_ROLES } from '../types/permissions'
@@ -39,6 +40,18 @@ export interface ServerMember {
   roles: string[]
 }
 
+export interface AuditLogEntry {
+  id: string
+  serverId: string
+  userId: string
+  username: string
+  action: string
+  targetId?: string
+  targetName?: string
+  details?: any
+  timestamp: Date
+}
+
 const cleanForFirestore = (obj: any): any => {
   if (obj === null || obj === undefined) {
     return null
@@ -62,6 +75,31 @@ const cleanForFirestore = (obj: any): any => {
 }
 
 export const serverService = {
+  async createAuditLog(
+    serverId: string,
+    userId: string,
+    username: string,
+    action: string,
+    targetId?: string,
+    targetName?: string,
+    details?: any
+  ): Promise<void> {
+    try {
+      await addDoc(collection(db, 'auditLogs'), {
+        serverId,
+        userId,
+        username,
+        action,
+        targetId,
+        targetName,
+        details: details || null,
+        timestamp: serverTimestamp()
+      })
+    } catch (error) {
+      console.error('Failed to create audit log:', error)
+    }
+  },
+
   async createServer(name: string, ownerId: string): Promise<Server> {
     try {
       const serverId = `server_${Date.now()}`
@@ -124,7 +162,7 @@ export const serverService = {
           id: 'everyone',
           name: DEFAULT_ROLES.EVERYONE,
           color: '#99AAB5',
-          permissions: ['view_channels', 'send_messages'],
+          permissions: ['view_channels', 'send_messages', 'view_member_list', 'connect', 'speak'],
           position: 0,
           mentionable: false,
           createdAt: new Date()
@@ -163,9 +201,18 @@ export const serverService = {
       await setDoc(doc(db, 'serverMembers', `${serverId}_${ownerId}`), {
         userId: ownerId,
         serverId: serverId,
-        roles: ['owner'],
+        roles: ['owner', 'everyone'],
         joinedAt: serverTimestamp()
       })
+
+      await this.createAuditLog(
+        serverId,
+        ownerId,
+        'Server Owner',
+        'SERVER_CREATED',
+        serverId,
+        name
+      )
 
       return server
     } catch (error: any) {
@@ -261,7 +308,7 @@ export const serverService = {
     }
   },
 
-  async createRole(serverId: string, name: string, color: string, permissions: string[]): Promise<void> {
+  async createRole(serverId: string, name: string, color: string, permissions: string[], createdBy?: string, createdByName?: string): Promise<void> {
     try {
       const serverRef = doc(db, 'servers', serverId)
       const serverDoc = await getDoc(serverRef)
@@ -288,12 +335,24 @@ export const serverService = {
       await updateDoc(serverRef, {
         roles: [...roles, cleanedRole]
       })
+
+      if (createdBy && createdByName) {
+        await this.createAuditLog(
+          serverId,
+          createdBy,
+          createdByName,
+          'ROLE_CREATED',
+          newRole.id,
+          name,
+          { permissions, color }
+        )
+      }
     } catch (error: any) {
       throw new Error(error.message)
     }
   },
 
-  async updateRole(serverId: string, roleId: string, updates: Partial<Role>): Promise<void> {
+  async updateRole(serverId: string, roleId: string, updates: Partial<Role>, updatedBy?: string, updatedByName?: string): Promise<void> {
     try {
       const serverRef = doc(db, 'servers', serverId)
       const serverDoc = await getDoc(serverRef)
@@ -304,6 +363,12 @@ export const serverService = {
 
       const server = serverDoc.data() as Server
       const roles = server.roles || []
+      const oldRole = roles.find(r => r.id === roleId)
+      
+      if (!oldRole) {
+        throw new Error('Role not found')
+      }
+
       const updatedRoles = roles.map(role => 
         role.id === roleId ? cleanForFirestore({ ...role, ...updates }) : role
       )
@@ -311,12 +376,31 @@ export const serverService = {
       await updateDoc(serverRef, {
         roles: updatedRoles
       })
+
+      if (updatedBy && updatedByName) {
+        await this.createAuditLog(
+          serverId,
+          updatedBy,
+          updatedByName,
+          'ROLE_UPDATED',
+          roleId,
+          oldRole.name,
+          { oldRole, updates }
+        )
+      }
+
+      const membersWithRole = await this.getMembersWithRole(serverId, roleId)
+      membersWithRole.forEach(userId => {
+        roleSyncService.forceRefreshUserPermissions(userId, serverId)
+          .catch(error => console.error('Failed to refresh user permissions:', error))
+      })
+
     } catch (error: any) {
       throw new Error(error.message)
     }
   },
 
-  async deleteRole(serverId: string, roleId: string): Promise<void> {
+  async deleteRole(serverId: string, roleId: string, deletedBy?: string, deletedByName?: string): Promise<void> {
     try {
       const serverRef = doc(db, 'servers', serverId)
       const serverDoc = await getDoc(serverRef)
@@ -349,6 +433,7 @@ export const serverService = {
       )
       
       const membersSnapshot = await getDocs(membersQuery)
+      const affectedMembers: string[] = []
       
       for (const memberDoc of membersSnapshot.docs) {
         const memberData = memberDoc.data()
@@ -357,8 +442,27 @@ export const serverService = {
           await updateDoc(memberDoc.ref, {
             roles: updatedMemberRoles
           })
+          affectedMembers.push(memberData.userId)
         }
       }
+
+      if (deletedBy && deletedByName) {
+        await this.createAuditLog(
+          serverId,
+          deletedBy,
+          deletedByName,
+          'ROLE_DELETED',
+          roleId,
+          role.name,
+          { affectedMembers: affectedMembers.length }
+        )
+      }
+
+      affectedMembers.forEach(userId => {
+        roleSyncService.forceRefreshUserPermissions(userId, serverId)
+          .catch(error => console.error('Failed to refresh user permissions:', error))
+      })
+
     } catch (error: any) {
       throw new Error(error.message)
     }
@@ -494,7 +598,7 @@ export const serverService = {
     }
   },
 
-  async assignRoleToUser(serverId: string, userId: string, roleId: string): Promise<void> {
+  async assignRoleToUser(serverId: string, userId: string, roleId: string, assignedBy?: string, assignedByName?: string): Promise<void> {
     try {
       const memberDocRef = doc(db, 'serverMembers', `${serverId}_${userId}`)
       const memberDoc = await getDoc(memberDocRef)
@@ -510,15 +614,36 @@ export const serverService = {
         throw new Error('User already has this role')
       }
 
+      const updatedRoles = [...currentRoles, roleId]
+
       await updateDoc(memberDocRef, {
-        roles: [...currentRoles, roleId]
+        roles: updatedRoles
       })
+
+      const server = await this.getServer(serverId)
+      const role = server?.roles.find(r => r.id === roleId)
+
+      if (assignedBy && assignedByName && role) {
+        await this.createAuditLog(
+          serverId,
+          assignedBy,
+          assignedByName,
+          'ROLE_ASSIGNED',
+          userId,
+          memberData.username || 'Unknown User',
+          { roleName: role.name, roleId }
+        )
+      }
+
+      roleSyncService.forceRefreshUserPermissions(userId, serverId)
+        .catch(error => console.error('Failed to refresh user permissions:', error))
+
     } catch (error: any) {
       throw new Error(error.message)
     }
   },
 
-  async removeRoleFromUser(serverId: string, userId: string, roleId: string): Promise<void> {
+  async removeRoleFromUser(serverId: string, userId: string, roleId: string, removedBy?: string, removedByName?: string): Promise<void> {
     try {
       const memberDocRef = doc(db, 'serverMembers', `${serverId}_${userId}`)
       const memberDoc = await getDoc(memberDocRef)
@@ -543,6 +668,48 @@ export const serverService = {
       await updateDoc(memberDocRef, {
         roles: updatedRoles
       })
+
+      const server = await this.getServer(serverId)
+      const role = server?.roles.find(r => r.id === roleId)
+
+      if (removedBy && removedByName && role) {
+        await this.createAuditLog(
+          serverId,
+          removedBy,
+          removedByName,
+          'ROLE_REMOVED',
+          userId,
+          memberData.username || 'Unknown User',
+          { roleName: role.name, roleId }
+        )
+      }
+
+      roleSyncService.forceRefreshUserPermissions(userId, serverId)
+        .catch(error => console.error('Failed to refresh user permissions:', error))
+
+    } catch (error: any) {
+      throw new Error(error.message)
+    }
+  },
+
+  async getMembersWithRole(serverId: string, roleId: string): Promise<string[]> {
+    try {
+      const membersQuery = query(
+        collection(db, 'serverMembers'),
+        where('serverId', '==', serverId)
+      )
+      
+      const membersSnapshot = await getDocs(membersQuery)
+      const membersWithRole: string[] = []
+      
+      membersSnapshot.forEach((doc) => {
+        const memberData = doc.data()
+        if (memberData.roles && memberData.roles.includes(roleId)) {
+          membersWithRole.push(memberData.userId)
+        }
+      })
+      
+      return membersWithRole
     } catch (error: any) {
       throw new Error(error.message)
     }
