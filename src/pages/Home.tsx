@@ -1,4 +1,3 @@
-// src/pages/Home.tsx
 import { useState, useEffect } from 'react'
 import { useServer } from '../contexts/ServerContext'
 import { useAuth } from '../contexts/AuthContext'
@@ -15,15 +14,6 @@ import MemberList from '../components/ui/MemberList'
 import UserProfileModal from '../components/ui/UserProfileModal'
 import type { Message } from '../services/messageService'
 import type { Role } from '../types/permissions'
-
-interface ChannelCategory {
-  name: string
-  channels: Array<{
-    id: string
-    name: string
-    type: 'text' | 'voice'
-  }>
-}
 
 type MobileView = 'servers' | 'channels' | 'chat'
 
@@ -188,32 +178,6 @@ export default function Home() {
     }
   }
 
-  const getChannelCategories = (): ChannelCategory[] => {
-    if (!activeServer) return []
-
-    const textChannels = activeServer.channels.filter(ch => ch.type === 'text')
-    const voiceChannels = activeServer.channels.filter(ch => ch.type === 'voice')
-
-    return [
-      {
-        name: 'Text Channels',
-        channels: textChannels.map(ch => ({
-          id: ch.id,
-          name: ch.name,
-          type: ch.type
-        }))
-      },
-      {
-        name: 'Voice Channels',
-        channels: voiceChannels.map(ch => ({
-          id: ch.id,
-          name: ch.name,
-          type: ch.type
-        }))
-      }
-    ]
-  }
-
   const handleToggleMemberList = () => {
     if (isMobile) {
       setShowMobileMemberList(!showMobileMemberList)
@@ -353,7 +317,8 @@ export default function Home() {
           <div className={`${mobileView === 'channels' ? 'block' : 'hidden'} h-full`}>
             <ChannelSidebar
               serverName={activeServer.name}
-              categories={getChannelCategories()}
+              channels={activeServer.channels}
+              categories={activeServer.categories}
               activeChannelId={activeChannelId}
               onChannelSelect={handleChannelSelect}
               onLeaveServer={() => {}}
@@ -392,7 +357,8 @@ export default function Home() {
       <div className="flex-1 flex">
         <ChannelSidebar
           serverName={activeServer.name}
-          categories={getChannelCategories()}
+          channels={activeServer.channels}
+          categories={activeServer.categories}
           activeChannelId={activeChannelId}
           onChannelSelect={handleChannelSelect}
           onLeaveServer={() => {}}

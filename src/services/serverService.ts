@@ -1,4 +1,4 @@
-// src/services/serverService.ts
+
 import { 
   collection, 
   doc, 
@@ -37,6 +37,28 @@ export interface ServerMember {
   username: string
   joinedAt: Date
   roles: string[]
+}
+
+const cleanForFirestore = (obj: any): any => {
+  if (obj === null || obj === undefined) {
+    return null
+  }
+  
+  if (Array.isArray(obj)) {
+    return obj.map(cleanForFirestore)
+  }
+  
+  if (typeof obj === 'object' && obj.constructor === Object) {
+    const cleaned: any = {}
+    for (const [key, value] of Object.entries(obj)) {
+      if (value !== undefined) {
+        cleaned[key] = cleanForFirestore(value)
+      }
+    }
+    return cleaned
+  }
+  
+  return obj
 }
 
 export const serverService = {
@@ -131,10 +153,12 @@ export const serverService = {
         displayRolesSeparately: true
       }
 
-      await setDoc(doc(db, 'servers', serverId), {
+      const cleanedServer = cleanForFirestore({
         ...server,
         createdAt: serverTimestamp()
       })
+
+      await setDoc(doc(db, 'servers', serverId), cleanedServer)
 
       await setDoc(doc(db, 'serverMembers', `${serverId}_${ownerId}`), {
         userId: ownerId,
@@ -152,7 +176,8 @@ export const serverService = {
   async updateServer(serverId: string, updates: Partial<Server>): Promise<void> {
     try {
       const serverRef = doc(db, 'servers', serverId)
-      await updateDoc(serverRef, updates)
+      const cleanedUpdates = cleanForFirestore(updates)
+      await updateDoc(serverRef, cleanedUpdates)
     } catch (error: any) {
       throw new Error(error.message)
     }
@@ -194,19 +219,21 @@ export const serverService = {
       }
 
       const server = serverDoc.data() as Server
+      const channels = server.channels || []
       const newChannel: Channel = {
         id: `${type}_${Date.now()}`,
         name: name.toLowerCase().replace(/[^a-z0-9-]/g, '-'),
         type,
         categoryId: type === 'text' ? 'text-category' : 'voice-category',
-        description: undefined,
-        position: server.channels.filter(ch => ch.type === type).length,
+        description: 'Channel description',
+        position: channels.filter(ch => ch.type === type).length,
         permissions: [],
         createdAt: new Date()
       }
 
+      const cleanedChannel = cleanForFirestore(newChannel)
       await updateDoc(serverRef, {
-        channels: [...server.channels, newChannel]
+        channels: [...channels, cleanedChannel]
       })
     } catch (error: any) {
       throw new Error(error.message)
@@ -223,7 +250,8 @@ export const serverService = {
       }
 
       const server = serverDoc.data() as Server
-      const updatedChannels = server.channels.filter(ch => ch.id !== channelId)
+      const channels = server.channels || []
+      const updatedChannels = channels.filter(ch => ch.id !== channelId)
 
       await updateDoc(serverRef, {
         channels: updatedChannels
@@ -243,7 +271,8 @@ export const serverService = {
       }
 
       const server = serverDoc.data() as Server
-      const maxPosition = Math.max(...server.roles.map(r => r.position))
+      const roles = server.roles || []
+      const maxPosition = Math.max(...roles.map(r => r.position), 0)
       
       const newRole: Role = {
         id: `role_${Date.now()}`,
@@ -255,8 +284,9 @@ export const serverService = {
         createdAt: new Date()
       }
 
+      const cleanedRole = cleanForFirestore(newRole)
       await updateDoc(serverRef, {
-        roles: [...server.roles, newRole]
+        roles: [...roles, cleanedRole]
       })
     } catch (error: any) {
       throw new Error(error.message)
@@ -273,8 +303,9 @@ export const serverService = {
       }
 
       const server = serverDoc.data() as Server
-      const updatedRoles = server.roles.map(role => 
-        role.id === roleId ? { ...role, ...updates } : role
+      const roles = server.roles || []
+      const updatedRoles = roles.map(role => 
+        role.id === roleId ? cleanForFirestore({ ...role, ...updates }) : role
       )
 
       await updateDoc(serverRef, {
@@ -295,7 +326,8 @@ export const serverService = {
       }
 
       const server = serverDoc.data() as Server
-      const role = server.roles.find(r => r.id === roleId)
+      const roles = server.roles || []
+      const role = roles.find(r => r.id === roleId)
       
       if (!role) {
         throw new Error('Role not found')
@@ -305,7 +337,7 @@ export const serverService = {
         throw new Error('Cannot delete protected roles')
       }
 
-      const updatedRoles = server.roles.filter(r => r.id !== roleId)
+      const updatedRoles = roles.filter(r => r.id !== roleId)
 
       await updateDoc(serverRef, {
         roles: updatedRoles
@@ -320,7 +352,7 @@ export const serverService = {
       
       for (const memberDoc of membersSnapshot.docs) {
         const memberData = memberDoc.data()
-        if (memberData.roles.includes(roleId)) {
+        if (memberData.roles && memberData.roles.includes(roleId)) {
           const updatedMemberRoles = memberData.roles.filter((r: string) => r !== roleId)
           await updateDoc(memberDoc.ref, {
             roles: updatedMemberRoles
@@ -335,8 +367,9 @@ export const serverService = {
   async reorderRoles(serverId: string, roles: Role[]): Promise<void> {
     try {
       const serverRef = doc(db, 'servers', serverId)
+      const cleanedRoles = cleanForFirestore(roles)
       await updateDoc(serverRef, {
-        roles: roles
+        roles: cleanedRoles
       })
     } catch (error: any) {
       throw new Error(error.message)
@@ -355,9 +388,13 @@ export const serverService = {
       const servers: Server[] = []
       
       querySnapshot.forEach((doc) => {
+        const data = doc.data()
         servers.push({
           id: doc.id,
-          ...doc.data()
+          ...data,
+          channels: data.channels || [],
+          categories: data.categories || [],
+          roles: data.roles || []
         } as Server)
       })
       
@@ -381,9 +418,13 @@ export const serverService = {
       }
       
       const doc = querySnapshot.docs[0]
+      const data = doc.data()
       return {
         id: doc.id,
-        ...doc.data()
+        ...data,
+        channels: data.channels || [],
+        categories: data.categories || [],
+        roles: data.roles || []
       } as Server
     } catch (error: any) {
       throw new Error(error.message)
@@ -415,9 +456,13 @@ export const serverService = {
       const docSnap = await getDoc(docRef)
       
       if (docSnap.exists()) {
+        const data = docSnap.data()
         return {
           id: docSnap.id,
-          ...docSnap.data()
+          ...data,
+          channels: data.channels || [],
+          categories: data.categories || [],
+          roles: data.roles || []
         } as Server
       }
       
@@ -438,9 +483,11 @@ export const serverService = {
 
       const memberData = memberDoc.data()
       const serverData = serverDoc.data() as Server
+      const roles = serverData.roles || []
+      const memberRoles = memberData.roles || []
       
-      return serverData.roles.filter(role => 
-        memberData.roles.includes(role.id) || role.id === 'everyone'
+      return roles.filter(role => 
+        memberRoles.includes(role.id) || role.id === 'everyone'
       )
     } catch (error: any) {
       throw new Error(error.message)
@@ -511,21 +558,23 @@ export const serverService = {
       }
 
       const server = serverDoc.data() as Server
-      const maxPosition = Math.max(...server.channels.filter(ch => ch.categoryId === categoryId).map(ch => ch.position), -1)
+      const channels = server.channels || []
+      const maxPosition = Math.max(...channels.filter(ch => ch.categoryId === categoryId).map(ch => ch.position), -1)
       
       const newChannel: Channel = {
         id: `${type}_${Date.now()}`,
         name: name.toLowerCase().replace(/[^a-z0-9-]/g, '-'),
         type,
-        categoryId,
-        description: undefined,
+        categoryId: categoryId || '',
+        description: 'Channel description',
         position: maxPosition + 1,
-        permissions,
+        permissions: permissions || [],
         createdAt: new Date()
       }
 
+      const cleanedChannel = cleanForFirestore(newChannel)
       await updateDoc(serverRef, {
-        channels: [...server.channels, newChannel]
+        channels: [...channels, cleanedChannel]
       })
     } catch (error: any) {
       throw new Error(error.message)
@@ -542,8 +591,9 @@ export const serverService = {
       }
 
       const server = serverDoc.data() as Server
-      const updatedChannels = server.channels.map(channel => 
-        channel.id === channelId ? { ...channel, ...updates } : channel
+      const channels = server.channels || []
+      const updatedChannels = channels.map(channel => 
+        channel.id === channelId ? cleanForFirestore({ ...channel, ...updates }) : channel
       )
 
       await updateDoc(serverRef, {
@@ -564,19 +614,21 @@ export const serverService = {
       }
 
       const server = serverDoc.data() as Server
-      const maxPosition = Math.max(...server.categories.map(cat => cat.position), -1)
+      const categories = server.categories || []
+      const maxPosition = Math.max(...categories.map(cat => cat.position), -1)
       
       const newCategory: Category = {
         id: `category_${Date.now()}`,
         name,
         position: maxPosition + 1,
         collapsed: false,
-        permissions,
+        permissions: permissions || [],
         createdAt: new Date()
       }
 
+      const cleanedCategory = cleanForFirestore(newCategory)
       await updateDoc(serverRef, {
-        categories: [...server.categories, newCategory]
+        categories: [...categories, cleanedCategory]
       })
     } catch (error: any) {
       throw new Error(error.message)
@@ -593,8 +645,9 @@ export const serverService = {
       }
 
       const server = serverDoc.data() as Server
-      const updatedCategories = server.categories.map(category => 
-        category.id === categoryId ? { ...category, ...updates } : category
+      const categories = server.categories || []
+      const updatedCategories = categories.map(category => 
+        category.id === categoryId ? cleanForFirestore({ ...category, ...updates }) : category
       )
 
       await updateDoc(serverRef, {
@@ -615,10 +668,12 @@ export const serverService = {
       }
 
       const server = serverDoc.data() as Server
+      const categories = server.categories || []
+      const channels = server.channels || []
       
-      const updatedCategories = server.categories.filter(cat => cat.id !== categoryId)
+      const updatedCategories = categories.filter(cat => cat.id !== categoryId)
       
-      const updatedChannels = server.channels.map(channel => 
+      const updatedChannels = channels.map(channel => 
         channel.categoryId === categoryId ? { ...channel, categoryId: '' } : channel
       )
 
@@ -634,10 +689,11 @@ export const serverService = {
   async reorderChannelsAndCategories(serverId: string, channels: Channel[], categories: Category[]): Promise<void> {
     try {
       const serverRef = doc(db, 'servers', serverId)
-      await updateDoc(serverRef, {
+      const cleanedData = cleanForFirestore({
         channels,
         categories
       })
+      await updateDoc(serverRef, cleanedData)
     } catch (error: any) {
       throw new Error(error.message)
     }
