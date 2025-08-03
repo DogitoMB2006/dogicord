@@ -1,6 +1,8 @@
 // src/components/chat/MessageItem.tsx
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import type { Message } from '../../services/messageService'
+import { serverService } from '../../services/serverService'
+import type { Role } from '../../types/permissions'
 import MessageActions from './MessageActions'
 import MessageEditor from './MessageEditor'
 
@@ -12,6 +14,7 @@ interface MessageItemProps {
   onDeleteMessage: (messageId: string) => Promise<void>
   onUserClick?: (userId: string) => void
   isMobile: boolean
+  serverId?: string
 }
 
 export default function MessageItem({
@@ -21,14 +24,52 @@ export default function MessageItem({
   onEditMessage,
   onDeleteMessage,
   onUserClick,
-  isMobile
+  isMobile,
+  serverId
 }: MessageItemProps) {
   const [isEditing, setIsEditing] = useState(false)
   const [isDeleting, setIsDeleting] = useState(false)
+  const [userRoleColor, setUserRoleColor] = useState('#ffffff')
 
   const isOwnMessage = message.authorId === currentUserId
   const isGifUrl = (url: string): boolean => {
     return url.includes('tenor.com') || url.includes('.gif') || url.match(/\.(gif|webp)(\?|$)/i) !== null
+  }
+
+  useEffect(() => {
+    const loadUserRoleColor = async () => {
+      try {
+        const messageServerId = serverId || message.serverId
+        if (!messageServerId) return
+
+        const userRoles = await serverService.getUserRoles(messageServerId, message.authorId)
+        const highestRole = getHighestRole(userRoles)
+        setUserRoleColor(highestRole.color)
+      } catch (error) {
+        console.error('Failed to load user role color:', error)
+      }
+    }
+
+    loadUserRoleColor()
+  }, [serverId, message.serverId, message.authorId])
+
+  const getHighestRole = (roles: Role[]): Role => {
+    const nonEveryoneRoles = roles.filter(role => role.name !== '@everyone')
+    if (nonEveryoneRoles.length === 0) {
+      return roles.find(role => role.name === '@everyone') || { 
+        id: 'default', 
+        name: 'Member', 
+        color: '#99AAB5', 
+        permissions: [], 
+        position: 0, 
+        mentionable: false, 
+        createdAt: new Date() 
+      }
+    }
+    
+    return nonEveryoneRoles.reduce((highest, current) => 
+      current.position > highest.position ? current : highest
+    )
   }
 
   const formatTime = (date: Date) => {
@@ -75,7 +116,8 @@ export default function MessageItem({
     <div className={`flex space-x-2 md:space-x-3 hover:bg-gray-800/30 px-1 md:px-2 py-2 md:py-1.5 rounded group`}>
       <div 
         onClick={() => onUserClick && onUserClick(message.authorId)}
-        className={`${isMobile ? 'w-8 h-8' : 'w-10 h-10'} bg-slate-600 rounded-full flex items-center justify-center flex-shrink-0 overflow-hidden cursor-pointer hover:ring-2 hover:ring-slate-500 transition-all`}
+        className={`${isMobile ? 'w-8 h-8' : 'w-10 h-10'} bg-slate-600 rounded-full flex items-center justify-center flex-shrink-0 overflow-hidden cursor-pointer hover:ring-2 transition-all`}
+        style={{ '--tw-ring-color': userRoleColor } as React.CSSProperties}
       >
         {message.authorAvatarUrl ? (
           <img
@@ -94,7 +136,8 @@ export default function MessageItem({
         <div className="flex items-baseline space-x-2">
           <span 
             onClick={() => onUserClick && onUserClick(message.authorId)}
-            className={`font-medium text-white cursor-pointer hover:underline ${isMobile ? 'text-sm' : 'text-base'}`}
+            className={`font-medium cursor-pointer hover:underline ${isMobile ? 'text-sm' : 'text-base'}`}
+            style={{ color: userRoleColor }}
           >
             {message.authorName}
           </span>

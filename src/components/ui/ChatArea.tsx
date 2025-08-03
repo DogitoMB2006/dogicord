@@ -1,3 +1,4 @@
+// src/components/ui/ChatArea.tsx
 import { useState, useRef, useEffect } from 'react'
 import type { Message } from '../../services/messageService'
 import { messageService } from '../../services/messageService'
@@ -11,6 +12,7 @@ interface ChatAreaProps {
   isMobile: boolean
   onBackToChannels?: () => void
   serverName: string
+  serverId?: string
   onShowMobileNav?: () => void
   onHideMobileNav?: () => void
   onToggleMemberList?: () => void
@@ -28,6 +30,7 @@ export default function ChatArea({
   isMobile, 
   onBackToChannels,
   serverName,
+  serverId,
   onShowMobileNav,
   onHideMobileNav,
   onToggleMemberList,
@@ -240,6 +243,7 @@ export default function ChatArea({
                     onDeleteMessage={handleDeleteMessage}
                     onUserClick={onUserClick}
                     isMobile={isMobile}
+                    serverId={serverId}
                   />
                 </div>
               )

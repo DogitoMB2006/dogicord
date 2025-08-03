@@ -1,3 +1,4 @@
+// src/components/ui/MemberList.tsx
 import { useState, useEffect } from 'react'
 import { serverService } from '../../services/serverService'
 import { authService } from '../../services/authService'
@@ -201,50 +202,57 @@ export default function MemberList({
     return members.filter(m => m.isOnline).length
   }
 
-  const renderMemberItem = (member: Member) => (
-    <div 
-      key={member.userId} 
-      onClick={() => onUserClick(member.userId)}
-      className={`flex items-center space-x-3 ${isMobile ? 'p-2' : 'p-2'} rounded-lg hover:bg-gray-700 transition-colors cursor-pointer group`}
-    >
-      <div className="relative">
-        <div className={`${isMobile ? 'w-10 h-10' : 'w-8 h-8'} bg-slate-600 rounded-full flex items-center justify-center overflow-hidden`}>
-          {member.avatar ? (
-            <img 
-              src={member.avatar} 
-              alt={member.username}
-              className="w-full h-full object-cover"
-            />
-          ) : (
-            <span className={`text-white font-medium ${isMobile ? 'text-sm' : 'text-xs'}`}>
-              {member.username.charAt(0).toUpperCase()}
-            </span>
+  const renderMemberItem = (member: Member) => {
+    const highestRole = getHighestRole(member.roles)
+    const memberColor = highestRole.color || '#99AAB5'
+    
+    return (
+      <div 
+        key={member.userId} 
+        onClick={() => onUserClick(member.userId)}
+        className={`flex items-center space-x-3 ${isMobile ? 'p-2' : 'p-2'} rounded-lg hover:bg-gray-700 transition-colors cursor-pointer group`}
+      >
+        <div className="relative">
+          <div className={`${isMobile ? 'w-10 h-10' : 'w-8 h-8'} bg-slate-600 rounded-full flex items-center justify-center overflow-hidden ring-2 transition-all`}
+               style={{ '--tw-ring-color': memberColor } as React.CSSProperties}>
+            {member.avatar ? (
+              <img 
+                src={member.avatar} 
+                alt={member.username}
+                className="w-full h-full object-cover"
+              />
+            ) : (
+              <span className={`text-white font-medium ${isMobile ? 'text-sm' : 'text-xs'}`}>
+                {member.username.charAt(0).toUpperCase()}
+              </span>
+            )}
+          </div>
+          <div className={`absolute ${isMobile ? '-bottom-1 -right-1 w-4 h-4' : '-bottom-0.5 -right-0.5 w-3 h-3'} bg-green-500 border-2 border-gray-800 rounded-full`}></div>
+        </div>
+        <div className="flex-1 min-w-0">
+          <p className={`font-medium truncate ${isMobile ? 'text-base' : 'text-sm'}`}
+             style={{ color: memberColor }}>
+            {member.username}
+          </p>
+          {!displayRolesSeparately && member.roles.length > 0 && (
+            <p className={`text-gray-400 truncate ${isMobile ? 'text-sm' : 'text-xs'}`}>
+              {member.roles
+                .filter(role => role.name !== '@everyone')
+                .slice(0, 1)
+                .map(role => role.name)
+                .join(', ')}
+            </p>
           )}
         </div>
-        <div className={`absolute ${isMobile ? '-bottom-1 -right-1 w-4 h-4' : '-bottom-0.5 -right-0.5 w-3 h-3'} bg-green-500 border-2 border-gray-800 rounded-full`}></div>
+        
+        <div className="opacity-0 group-hover:opacity-100 transition-opacity">
+          <svg className={`${isMobile ? 'w-4 h-4' : 'w-3 h-3'} text-gray-400`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+          </svg>
+        </div>
       </div>
-      <div className="flex-1 min-w-0">
-        <p className={`text-white font-medium truncate ${isMobile ? 'text-base' : 'text-sm'}`}>
-          {member.username}
-        </p>
-        {!displayRolesSeparately && member.roles.length > 0 && (
-          <p className={`text-gray-400 truncate ${isMobile ? 'text-sm' : 'text-xs'}`}>
-            {member.roles
-              .filter(role => role.name !== '@everyone')
-              .slice(0, 1)
-              .map(role => role.name)
-              .join(', ')}
-          </p>
-        )}
-      </div>
-      
-      <div className="opacity-0 group-hover:opacity-100 transition-opacity">
-        <svg className={`${isMobile ? 'w-4 h-4' : 'w-3 h-3'} text-gray-400`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-        </svg>
-      </div>
-    </div>
-  )
+    )
+  }
 
   if (!isOpen) return null
 

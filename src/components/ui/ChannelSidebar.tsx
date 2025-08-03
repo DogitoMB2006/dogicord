@@ -1,7 +1,9 @@
-
-import { useState } from 'react'
+// src/components/ui/ChannelSidebar.tsx
+import { useState, useEffect } from 'react'
 import { useAuth } from '../../contexts/AuthContext'
+import { serverService } from '../../services/serverService'
 import type { Channel, Category } from '../../types/channels'
+import type { Role } from '../../types/permissions'
 
 interface ChannelSidebarProps {
   serverName: string
@@ -30,8 +32,47 @@ export default function ChannelSidebar({
   isMobile,
   onBackToServers
 }: ChannelSidebarProps) {
-  const { userProfile, logout } = useAuth()
+  const { userProfile, logout, currentUser } = useAuth()
   const [showServerDropdown, setShowServerDropdown] = useState(false)
+  const [userRoleColor, setUserRoleColor] = useState('#99AAB5')
+
+  useEffect(() => {
+    const loadUserRoleColor = async () => {
+      if (!currentUser || !channels.length) return
+
+      try {
+        const serverId = channels[0]?.categoryId || 'unknown'
+        if (serverId === 'unknown') return
+
+        const userRoles = await serverService.getUserRoles(serverId, currentUser.uid)
+        const highestRole = getHighestRole(userRoles)
+        setUserRoleColor(highestRole.color)
+      } catch (error) {
+        console.error('Failed to load user role color:', error)
+      }
+    }
+
+    loadUserRoleColor()
+  }, [currentUser, channels])
+
+  const getHighestRole = (roles: Role[]): Role => {
+    const nonEveryoneRoles = roles.filter(role => role.name !== '@everyone')
+    if (nonEveryoneRoles.length === 0) {
+      return roles.find(role => role.name === '@everyone') || { 
+        id: 'default', 
+        name: 'Member', 
+        color: '#99AAB5', 
+        permissions: [], 
+        position: 0, 
+        mentionable: false, 
+        createdAt: new Date() 
+      }
+    }
+    
+    return nonEveryoneRoles.reduce((highest, current) => 
+      current.position > highest.position ? current : highest
+    )
+  }
 
   const organizedChannels = categories
     .sort((a, b) => a.position - b.position)
@@ -245,7 +286,8 @@ export default function ChannelSidebar({
       </div>
 
       <div className={`${isMobile ? 'h-16' : 'h-14'} bg-gray-850 flex items-center px-2 space-x-2 border-t border-gray-700`}>
-        <div className={`${isMobile ? 'w-10 h-10' : 'w-8 h-8'} bg-slate-600 rounded-full flex items-center justify-center flex-shrink-0 overflow-hidden`}>
+        <div className={`${isMobile ? 'w-10 h-10' : 'w-8 h-8'} bg-slate-600 rounded-full flex items-center justify-center flex-shrink-0 overflow-hidden ring-2 transition-all`}
+             style={{ '--tw-ring-color': userRoleColor } as React.CSSProperties}>
           {(userProfile as any)?.avatar ? (
             <img 
               src={(userProfile as any).avatar} 
@@ -260,7 +302,8 @@ export default function ChannelSidebar({
         </div>
         
         <div className="flex-1 min-w-0">
-          <div className={`${isMobile ? 'text-base' : 'text-sm'} font-medium text-white truncate`}>
+          <div className={`${isMobile ? 'text-base' : 'text-sm'} font-medium truncate`}
+               style={{ color: userRoleColor }}>
             {userProfile?.username || 'User'}
           </div>
           <div className={`${isMobile ? 'text-sm' : 'text-xs'} text-gray-400`}>Online</div>

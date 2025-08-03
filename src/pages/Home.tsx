@@ -1,3 +1,4 @@
+// src/pages/Home.tsx
 import { useState, useEffect, useCallback } from 'react'
 import { useServer } from '../contexts/ServerContext'
 import { useAuth } from '../contexts/AuthContext'
@@ -489,6 +490,7 @@ export default function Home() {
                 setShowMobileNav(true)
               }}
               serverName={activeServer.name}
+              serverId={activeServerId}
               onShowMobileNav={() => setShowMobileNav(true)}
               onHideMobileNav={() => setShowMobileNav(false)}
               onToggleMemberList={handleToggleMemberList}
@@ -532,6 +534,7 @@ export default function Home() {
           onSendMessage={handleSendMessage}
           isMobile={false}
           serverName={activeServer.name}
+          serverId={activeServerId}
           onToggleMemberList={handleToggleMemberList}
           onUserClick={handleUserClick}
           currentUserId={currentUser?.uid || ''}
