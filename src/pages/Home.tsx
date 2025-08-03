@@ -177,20 +177,8 @@ export default function Home() {
     return hasPermission('manage_server') || isOwner()
   }
 
-  const canManageChannels = (): boolean => {
-    return hasPermission('manage_channels') || isOwner()
-  }
-
-  const canManageRoles = (): boolean => {
-    return hasPermission('manage_roles') || isOwner()
-  }
-
   const canManageMessages = (): boolean => {
     return hasPermission('manage_messages') || isOwner()
-  }
-
-  const canViewMemberList = (): boolean => {
-    return hasPermission('view_member_list') || isOwner()
   }
 
   const handleCreateServer = async (serverName: string) => {
@@ -308,11 +296,6 @@ export default function Home() {
   }
 
   const handleToggleMemberList = () => {
-    if (!canViewMemberList()) {
-      setError('You do not have permission to view the member list')
-      return
-    }
-
     if (isMobile) {
       setShowMobileMemberList(!showMobileMemberList)
     } else {
@@ -557,7 +540,7 @@ export default function Home() {
           sendMessageError={sendMessageError}
         />
 
-        {showMemberList && canViewMemberList() && (
+        {showMemberList && (
           <MemberList
             serverId={activeServerId!}
             serverMembers={activeServer.members}
@@ -660,7 +643,7 @@ export default function Home() {
         }}
       />
 
-      {showMobileMemberList && activeServer && canViewMemberList() && (
+      {showMobileMemberList && activeServer && (
         <MemberList
           serverId={activeServerId!}
           serverMembers={activeServer.members}

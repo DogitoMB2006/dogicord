@@ -1,7 +1,7 @@
-// src/components/ui/MemberList.tsx
 import { useState, useEffect } from 'react'
 import { serverService } from '../../services/serverService'
 import { authService } from '../../services/authService'
+import { roleSyncService } from '../../services/roleSyncService'
 import type { Role } from '../../types/permissions'
 
 interface Member {
@@ -25,7 +25,7 @@ interface MemberListProps {
   isMobile: boolean
   onUserClick: (userId: string) => void
   displayRolesSeparately?: boolean
-  refreshTrigger?: number // Nueva prop para forzar actualización
+  refreshTrigger?: number
 }
 
 export default function MemberList({ 
@@ -41,12 +41,79 @@ export default function MemberList({
   const [members, setMembers] = useState<Member[]>([])
   const [roleGroups, setRoleGroups] = useState<RoleGroup[]>([])
   const [loading, setLoading] = useState(true)
+  const [serverRoles, setServerRoles] = useState<Role[]>([])
+  const [memberRoleUpdates, setMemberRoleUpdates] = useState<Map<string, Role[]>>(new Map())
 
   useEffect(() => {
     if (isOpen && serverId) {
       loadMembers()
     }
   }, [isOpen, serverId, serverMembers, displayRolesSeparately, refreshTrigger])
+
+  useEffect(() => {
+    if (!serverId) return
+
+    const unsubscribeServerRoles = roleSyncService.subscribeToServerRoles(serverId, (roles) => {
+      setServerRoles(roles)
+      if (memberRoleUpdates.size > 0) {
+        updateMembersWithNewRoles()
+      }
+    })
+
+    const unsubscribeAllMembers = roleSyncService.subscribeToAllServerMembers(serverId, (memberUpdates) => {
+      setMemberRoleUpdates(memberUpdates)
+      if (serverRoles.length > 0) {
+        updateMembersWithNewRoles(memberUpdates)
+      }
+    })
+
+    const unsubscribeRoleUpdates = roleSyncService.onRoleUpdate((update) => {
+      if (update.serverId === serverId) {
+        setMembers(prevMembers => 
+          prevMembers.map(member => 
+            member.userId === update.userId 
+              ? { ...member, roles: update.roles }
+              : member
+          )
+        )
+        
+        if (displayRolesSeparately && serverRoles.length > 0) {
+          setTimeout(() => {
+            const updatedMembers = members.map(member => 
+              member.userId === update.userId 
+                ? { ...member, roles: update.roles }
+                : member
+            )
+            organizeByRoles(updatedMembers)
+          }, 100)
+        }
+      }
+    })
+
+    return () => {
+      unsubscribeServerRoles()
+      unsubscribeAllMembers()
+      unsubscribeRoleUpdates()
+    }
+  }, [serverId, displayRolesSeparately, serverRoles, members])
+
+  const updateMembersWithNewRoles = (memberUpdates?: Map<string, Role[]>) => {
+    const updates = memberUpdates || memberRoleUpdates
+    if (updates.size === 0) return
+
+    setMembers(prevMembers => {
+      const updatedMembers = prevMembers.map(member => {
+        const newRoles = updates.get(member.userId)
+        return newRoles ? { ...member, roles: newRoles } : member
+      })
+      
+      if (displayRolesSeparately) {
+        setTimeout(() => organizeByRoles(updatedMembers), 50)
+      }
+      
+      return updatedMembers
+    })
+  }
 
   const loadMembers = async () => {
     setLoading(true)
@@ -134,14 +201,62 @@ export default function MemberList({
     return members.filter(m => m.isOnline).length
   }
 
+  const renderMemberItem = (member: Member) => (
+    <div 
+      key={member.userId} 
+      onClick={() => onUserClick(member.userId)}
+      className={`flex items-center space-x-3 ${isMobile ? 'p-2' : 'p-2'} rounded-lg hover:bg-gray-700 transition-colors cursor-pointer group`}
+    >
+      <div className="relative">
+        <div className={`${isMobile ? 'w-10 h-10' : 'w-8 h-8'} bg-slate-600 rounded-full flex items-center justify-center overflow-hidden`}>
+          {member.avatar ? (
+            <img 
+              src={member.avatar} 
+              alt={member.username}
+              className="w-full h-full object-cover"
+            />
+          ) : (
+            <span className={`text-white font-medium ${isMobile ? 'text-sm' : 'text-xs'}`}>
+              {member.username.charAt(0).toUpperCase()}
+            </span>
+          )}
+        </div>
+        <div className={`absolute ${isMobile ? '-bottom-1 -right-1 w-4 h-4' : '-bottom-0.5 -right-0.5 w-3 h-3'} bg-green-500 border-2 border-gray-800 rounded-full`}></div>
+      </div>
+      <div className="flex-1 min-w-0">
+        <p className={`text-white font-medium truncate ${isMobile ? 'text-base' : 'text-sm'}`}>
+          {member.username}
+        </p>
+        {!displayRolesSeparately && member.roles.length > 0 && (
+          <p className={`text-gray-400 truncate ${isMobile ? 'text-sm' : 'text-xs'}`}>
+            {member.roles
+              .filter(role => role.name !== '@everyone')
+              .slice(0, 1)
+              .map(role => role.name)
+              .join(', ')}
+          </p>
+        )}
+      </div>
+      
+      <div className="opacity-0 group-hover:opacity-100 transition-opacity">
+        <svg className={`${isMobile ? 'w-4 h-4' : 'w-3 h-3'} text-gray-400`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+        </svg>
+      </div>
+    </div>
+  )
+
   if (!isOpen) return null
 
   if (isMobile) {
     return (
       <div className="fixed inset-0 bg-gray-800 z-50 flex flex-col">
         <div className="flex items-center justify-between p-4 border-b border-gray-700">
-          <h2 className="text-lg font-semibold text-white">
-            Members — {getMemberCount()}
+          <h2 className="text-lg font-semibold text-white flex items-center space-x-2">
+            <span>Members — {getMemberCount()}</span>
+            {loading && (
+              <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+            )}
           </h2>
           <button
             onClick={onClose}
@@ -171,33 +286,7 @@ export default function MemberList({
                       {group.role.name} — {group.members.length}
                     </h3>
                     <div className="space-y-2">
-                      {group.members.map((member) => (
-                        <div 
-                          key={member.userId} 
-                          onClick={() => onUserClick(member.userId)}
-                          className="flex items-center space-x-3 p-2 rounded-lg hover:bg-gray-700 transition-colors cursor-pointer"
-                        >
-                          <div className="relative">
-                            <div className="w-10 h-10 bg-slate-600 rounded-full flex items-center justify-center overflow-hidden">
-                              {member.avatar ? (
-                                <img 
-                                  src={member.avatar} 
-                                  alt={member.username}
-                                  className="w-full h-full object-cover"
-                                />
-                              ) : (
-                                <span className="text-white font-medium text-sm">
-                                  {member.username.charAt(0).toUpperCase()}
-                                </span>
-                              )}
-                            </div>
-                            <div className="absolute -bottom-1 -right-1 w-4 h-4 bg-green-500 border-2 border-gray-800 rounded-full"></div>
-                          </div>
-                          <div className="flex-1 min-w-0">
-                            <p className="text-white font-medium truncate">{member.username}</p>
-                          </div>
-                        </div>
-                      ))}
+                      {group.members.map(renderMemberItem)}
                     </div>
                   </div>
                 ))
@@ -210,42 +299,7 @@ export default function MemberList({
                     {members
                       .filter(m => m.isOnline)
                       .sort((a, b) => a.username.localeCompare(b.username))
-                      .map((member) => (
-                        <div 
-                          key={member.userId} 
-                          onClick={() => onUserClick(member.userId)}
-                          className="flex items-center space-x-3 p-2 rounded-lg hover:bg-gray-700 transition-colors cursor-pointer"
-                        >
-                          <div className="relative">
-                            <div className="w-10 h-10 bg-slate-600 rounded-full flex items-center justify-center overflow-hidden">
-                              {member.avatar ? (
-                                <img 
-                                  src={member.avatar} 
-                                  alt={member.username}
-                                  className="w-full h-full object-cover"
-                                />
-                              ) : (
-                                <span className="text-white font-medium text-sm">
-                                  {member.username.charAt(0).toUpperCase()}
-                                </span>
-                              )}
-                            </div>
-                            <div className="absolute -bottom-1 -right-1 w-4 h-4 bg-green-500 border-2 border-gray-800 rounded-full"></div>
-                          </div>
-                          <div className="flex-1 min-w-0">
-                            <p className="text-white font-medium truncate">{member.username}</p>
-                            {member.roles.length > 0 && (
-                              <p className="text-xs text-gray-400 truncate">
-                                {member.roles
-                                  .filter(role => role.name !== '@everyone')
-                                  .slice(0, 1)
-                                  .map(role => role.name)
-                                  .join(', ')}
-                              </p>
-                            )}
-                          </div>
-                        </div>
-                      ))}
+                      .map(renderMemberItem)}
                   </div>
                 </div>
               )}
@@ -260,8 +314,11 @@ export default function MemberList({
     <div className="w-60 bg-gray-800 border-l border-gray-700 flex flex-col h-full">
       <div className="p-4 border-b border-gray-700">
         <div className="flex items-center justify-between">
-          <h2 className="text-sm font-semibold text-white">
-            Members — {getMemberCount()}
+          <h2 className="text-sm font-semibold text-white flex items-center space-x-2">
+            <span>Members — {getMemberCount()}</span>
+            {loading && (
+              <div className="w-3 h-3 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+            )}
           </h2>
           <button
             onClick={onClose}
@@ -292,33 +349,7 @@ export default function MemberList({
                     {group.role.name} — {group.members.length}
                   </h3>
                   <div className="space-y-1">
-                    {group.members.map((member) => (
-                      <div 
-                        key={member.userId} 
-                        onClick={() => onUserClick(member.userId)}
-                        className="flex items-center space-x-2 p-2 rounded hover:bg-gray-700 transition-colors cursor-pointer"
-                      >
-                        <div className="relative">
-                          <div className="w-8 h-8 bg-slate-600 rounded-full flex items-center justify-center overflow-hidden">
-                            {member.avatar ? (
-                              <img 
-                                src={member.avatar} 
-                                alt={member.username}
-                                className="w-full h-full object-cover"
-                              />
-                            ) : (
-                              <span className="text-white font-medium text-xs">
-                                {member.username.charAt(0).toUpperCase()}
-                              </span>
-                            )}
-                          </div>
-                          <div className="absolute -bottom-0.5 -right-0.5 w-3 h-3 bg-green-500 border-2 border-gray-800 rounded-full"></div>
-                        </div>
-                        <div className="flex-1 min-w-0">
-                          <p className="text-white text-sm font-medium truncate">{member.username}</p>
-                        </div>
-                      </div>
-                    ))}
+                    {group.members.map(renderMemberItem)}
                   </div>
                 </div>
               ))
@@ -331,48 +362,21 @@ export default function MemberList({
                   {members
                     .filter(m => m.isOnline)
                     .sort((a, b) => a.username.localeCompare(b.username))
-                    .map((member) => (
-                      <div 
-                        key={member.userId} 
-                        onClick={() => onUserClick(member.userId)}
-                        className="flex items-center space-x-2 p-2 rounded hover:bg-gray-700 transition-colors cursor-pointer"
-                      >
-                        <div className="relative">
-                          <div className="w-8 h-8 bg-slate-600 rounded-full flex items-center justify-center overflow-hidden">
-                            {member.avatar ? (
-                              <img 
-                                src={member.avatar} 
-                                alt={member.username}
-                                className="w-full h-full object-cover"
-                              />
-                            ) : (
-                              <span className="text-white font-medium text-xs">
-                                {member.username.charAt(0).toUpperCase()}
-                              </span>
-                            )}
-                          </div>
-                          <div className="absolute -bottom-0.5 -right-0.5 w-3 h-3 bg-green-500 border-2 border-gray-800 rounded-full"></div>
-                        </div>
-                        <div className="flex-1 min-w-0">
-                          <p className="text-white text-sm font-medium truncate">{member.username}</p>
-                          {member.roles.length > 0 && (
-                            <p className="text-xs text-gray-400 truncate">
-                              {member.roles
-                                .filter(role => role.name !== '@everyone')
-                                .slice(0, 1)
-                                .map(role => role.name)
-                                .join(', ')}
-                            </p>
-                          )}
-                        </div>
-                      </div>
-                    ))}
+                    .map(renderMemberItem)}
                 </div>
               </div>
             )}
           </div>
         )}
       </div>
+
+      {!loading && members.length === 0 && (
+        <div className="flex-1 flex items-center justify-center">
+          <p className="text-gray-400 text-sm text-center px-4">
+            No members found
+          </p>
+        </div>
+      )}
     </div>
   )
 }

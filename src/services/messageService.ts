@@ -235,14 +235,16 @@ export const messageService = {
             isOwner
           )
 
-          const userJoinDate = new Date()
-
           querySnapshot.forEach((doc) => {
             const data = doc.data()
             const messageDate = data.timestamp ? (data.timestamp as Timestamp).toDate() : new Date()
 
-            if (!historyPermCheck.allowed && messageDate < userJoinDate) {
-              return
+            if (!historyPermCheck.allowed) {
+              const now = new Date()
+              const fiveMinutesAgo = new Date(now.getTime() - 5 * 60 * 1000)
+              if (messageDate < fiveMinutesAgo) {
+                return
+              }
             }
 
             messages.push({

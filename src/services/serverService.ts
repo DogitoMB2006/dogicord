@@ -14,6 +14,7 @@ import {
 } from 'firebase/firestore'
 import { ref, uploadBytes, getDownloadURL, deleteObject, getStorage } from 'firebase/storage'
 import { db } from '../config/firebase'
+import { authService } from './authService'
 import { roleSyncService } from './roleSyncService'
 import type { Role } from '../types/permissions'
 import type { Channel, Category, ChannelPermission } from '../types/channels'
@@ -162,7 +163,22 @@ export const serverService = {
           id: 'everyone',
           name: DEFAULT_ROLES.EVERYONE,
           color: '#99AAB5',
-          permissions: ['view_channels', 'send_messages', 'view_member_list', 'connect', 'speak'],
+          permissions: [
+            'view_channels', 
+            'send_messages', 
+            'view_member_list', 
+            'connect', 
+            'speak',
+            'read_message_history',
+            'add_reactions',
+            'use_voice_activity',
+            'create_instant_invite',
+            'embed_links',
+            'attach_files',
+            'use_external_emojis',
+            'use_slash_commands',
+            'change_nickname'
+          ],
           position: 0,
           mentionable: false,
           createdAt: new Date()
@@ -622,6 +638,7 @@ export const serverService = {
 
       const server = await this.getServer(serverId)
       const role = server?.roles.find(r => r.id === roleId)
+      const targetProfile = await authService.getUserProfile(userId)
 
       if (assignedBy && assignedByName && role) {
         await this.createAuditLog(
@@ -630,7 +647,7 @@ export const serverService = {
           assignedByName,
           'ROLE_ASSIGNED',
           userId,
-          memberData.username || 'Unknown User',
+          targetProfile?.username || memberData.username || 'Unknown User',
           { roleName: role.name, roleId }
         )
       }
@@ -671,6 +688,7 @@ export const serverService = {
 
       const server = await this.getServer(serverId)
       const role = server?.roles.find(r => r.id === roleId)
+      const targetProfile = await authService.getUserProfile(userId)
 
       if (removedBy && removedByName && role) {
         await this.createAuditLog(
@@ -679,7 +697,7 @@ export const serverService = {
           removedByName,
           'ROLE_REMOVED',
           userId,
-          memberData.username || 'Unknown User',
+          targetProfile?.username || memberData.username || 'Unknown User',
           { roleName: role.name, roleId }
         )
       }

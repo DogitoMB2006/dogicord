@@ -1,7 +1,7 @@
-// src/components/ui/UserProfileModal.tsx
 import { useState, useEffect } from 'react'
 import { authService } from '../../services/authService'
 import { serverService } from '../../services/serverService'
+import { useAuth } from '../../contexts/AuthContext'
 import type { UserProfile } from '../../services/authService'
 import type { Role } from '../../types/permissions'
 import RoleAssignment from '../server/RoleAssignment'
@@ -29,6 +29,7 @@ export default function UserProfileModal({
   isOwner = false,
   onRoleUpdate
 }: UserProfileModalProps) {
+  const { userProfile: currentUserProfile } = useAuth()
   const [userProfile, setUserProfile] = useState<UserProfile | null>(null)
   const [userRoles, setUserRoles] = useState<Role[]>([])
   const [allServerRoles, setAllServerRoles] = useState<Role[]>([])
@@ -102,9 +103,14 @@ export default function UserProfileModal({
 
   const handleAssignRole = async (targetUserId: string, roleId: string) => {
     try {
-      await serverService.assignRoleToUser(serverId, targetUserId, roleId)
+      await serverService.assignRoleToUser(
+        serverId, 
+        targetUserId, 
+        roleId, 
+        currentUserId, 
+        currentUserProfile?.username || 'Unknown User'
+      )
       await loadUserProfile()
-      // Actualizar datos en tiempo real
       if (onRoleUpdate) {
         await onRoleUpdate()
       }
@@ -115,9 +121,14 @@ export default function UserProfileModal({
 
   const handleRemoveRole = async (targetUserId: string, roleId: string) => {
     try {
-      await serverService.removeRoleFromUser(serverId, targetUserId, roleId)
+      await serverService.removeRoleFromUser(
+        serverId, 
+        targetUserId, 
+        roleId, 
+        currentUserId, 
+        currentUserProfile?.username || 'Unknown User'
+      )
       await loadUserProfile()
-      // Actualizar datos en tiempo real
       if (onRoleUpdate) {
         await onRoleUpdate()
       }
