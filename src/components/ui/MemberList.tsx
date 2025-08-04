@@ -5,7 +5,6 @@ import { authService } from '../../services/authService'
 import { roleSyncService } from '../../services/roleSyncService'
 import { presenceService } from '../../services/presenceService'
 import type { Role } from '../../types/permissions'
-import type { UserPresence } from '../../services/presenceService'
 
 interface Member {
   userId: string
@@ -206,59 +205,6 @@ export default function MemberList({
       unsubscribePresence()
     }
   }, [serverId, isOpen, serverMembers])
-
-  const loadMembers = useCallback(async () => {
-    if (!serverId || !serverMembers.length) return
-    
-    setLoading(true)
-    try {
-      const memberProfiles: Member[] = []
-      const batchSize = 10
-      
-      for (let i = 0; i < serverMembers.length; i += batchSize) {
-  const batch = serverMembers.slice(i, i + batchSize)
-  const batchPromises = batch.map(async (memberId) => {
-    try {
-      const [profile, userRoles, presence] = await Promise.all([
-        authService.getUserProfile(memberId),
-        serverService.getUserRoles(serverId, memberId),
-        presenceService.getUserPresence(memberId)
-      ])
-
-      if (profile) {
-        return {
-          userId: profile.uid,
-          username: profile.username,
-          avatar: (profile as any).avatar,
-          roles: userRoles,
-          isOnline: presence?.isOnline || false,
-          lastSeen: presence?.lastSeen || new Date()
-        }
-      }
-    } catch (error) {
-      console.error(`Failed to load member ${memberId}:`, error)
-    }
-    return null
-  })
-
-
-  const batchResults = await Promise.allSettled(batchPromises)
-
-  batchResults.forEach((result: PromiseSettledResult<Member | null>) => {
-    if (result.status === 'fulfilled' && result.value) {
-      memberProfiles.push(result.value)
-    }
-  })
-}
-
-      
-      setMembers(memberProfiles)
-    } catch (error) {
-      console.error('Failed to load members:', error)
-    } finally {
-      setLoading(false)
-    }
-  }, [serverId, serverMembers])
 
   const getHighestRole = useCallback((roles: Role[]): Role => {
     const nonEveryoneRoles = roles.filter(role => role.name !== '@everyone')

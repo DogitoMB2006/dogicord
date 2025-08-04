@@ -1,21 +1,5 @@
+// src/components/ui/GifSelector.tsx
 import { useState, useEffect, useRef } from 'react'
-
-interface GifData {
-  id: string
-  title: string
-  media_formats: {
-    gif: {
-      url: string
-      dims: [number, number]
-      size: number
-    }
-    tinygif: {
-      url: string
-      dims: [number, number]
-      size: number
-    }
-  }
-}
 
 interface GifSelectorProps {
   isOpen: boolean
@@ -24,15 +8,15 @@ interface GifSelectorProps {
   isMobile: boolean
 }
 
-const TENOR_API_KEY = 'AIzaSyD7GrVWz4mx4Htd_i0XgSduLRs1qbFwBdA'
-const TENOR_BASE_URL = 'https://tenor.googleapis.com/v2'
+const GIPHY_API_KEY = 'GlVGYHkr3WSBnllca54iNt0yFbjz7L65'
+const GIPHY_BASE_URL = 'https://api.giphy.com/v1/gifs'
 
 export default function GifSelector({ isOpen, onClose, onSelectGif, isMobile }: GifSelectorProps) {
-  const [gifs, setGifs] = useState<GifData[]>([])
+  const [gifs, setGifs] = useState<any[]>([])
   const [searchTerm, setSearchTerm] = useState('')
   const [loading, setLoading] = useState(false)
   const [hasMore, setHasMore] = useState(true)
-  const [nextPos, setNextPos] = useState('')
+  const [offset, setOffset] = useState(0)
   const containerRef = useRef<HTMLDivElement>(null)
   const searchTimeoutRef = useRef<NodeJS.Timeout | null>(null)
 
@@ -66,17 +50,24 @@ export default function GifSelector({ isOpen, onClose, onSelectGif, isMobile }: 
     setLoading(true)
     try {
       const response = await fetch(
-        `${TENOR_BASE_URL}/trending?key=${TENOR_API_KEY}&limit=20&media_filter=gif,tinygif`
+        `${GIPHY_BASE_URL}/trending?api_key=${GIPHY_API_KEY}&limit=20&rating=g&fmt=json`
       )
+      
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`)
+      }
+      
       const data = await response.json()
       
-      if (data.results) {
-        setGifs(data.results)
-        setNextPos(data.next || '')
-        setHasMore(!!data.next)
+      if (data.data) {
+        setGifs(data.data)
+        setOffset(20)
+        setHasMore(data.data.length === 20)
       }
     } catch (error) {
       console.error('Error loading trending GIFs:', error)
+      setGifs([])
+      setHasMore(false)
     } finally {
       setLoading(false)
     }
@@ -85,20 +76,28 @@ export default function GifSelector({ isOpen, onClose, onSelectGif, isMobile }: 
   const searchGifs = async (query: string, append = false) => {
     setLoading(true)
     try {
-      const url = append && nextPos
-        ? `${TENOR_BASE_URL}/search?key=${TENOR_API_KEY}&q=${encodeURIComponent(query)}&limit=20&pos=${nextPos}&media_filter=gif,tinygif`
-        : `${TENOR_BASE_URL}/search?key=${TENOR_API_KEY}&q=${encodeURIComponent(query)}&limit=20&media_filter=gif,tinygif`
-
-      const response = await fetch(url)
+      const currentOffset = append ? offset : 0
+      const response = await fetch(
+        `${GIPHY_BASE_URL}/search?api_key=${GIPHY_API_KEY}&q=${encodeURIComponent(query)}&limit=20&offset=${currentOffset}&rating=g&fmt=json`
+      )
+      
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`)
+      }
+      
       const data = await response.json()
       
-      if (data.results) {
-        setGifs(prev => append ? [...prev, ...data.results] : data.results)
-        setNextPos(data.next || '')
-        setHasMore(!!data.next)
+      if (data.data) {
+        setGifs(prev => append ? [...prev, ...data.data] : data.data)
+        setOffset(currentOffset + 20)
+        setHasMore(data.data.length === 20)
       }
     } catch (error) {
       console.error('Error searching GIFs:', error)
+      if (!append) {
+        setGifs([])
+        setHasMore(false)
+      }
     } finally {
       setLoading(false)
     }
@@ -117,29 +116,35 @@ export default function GifSelector({ isOpen, onClose, onSelectGif, isMobile }: 
   }
 
   const loadMoreTrending = async () => {
-    if (!nextPos || loading) return
+    if (loading || !hasMore) return
     
     setLoading(true)
     try {
       const response = await fetch(
-        `${TENOR_BASE_URL}/trending?key=${TENOR_API_KEY}&limit=20&pos=${nextPos}&media_filter=gif,tinygif`
+        `${GIPHY_BASE_URL}/trending?api_key=${GIPHY_API_KEY}&limit=20&offset=${offset}&rating=g&fmt=json`
       )
+      
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`)
+      }
+      
       const data = await response.json()
       
-      if (data.results) {
-        setGifs(prev => [...prev, ...data.results])
-        setNextPos(data.next || '')
-        setHasMore(!!data.next)
+      if (data.data) {
+        setGifs(prev => [...prev, ...data.data])
+        setOffset(prev => prev + 20)
+        setHasMore(data.data.length === 20)
       }
     } catch (error) {
       console.error('Error loading more GIFs:', error)
+      setHasMore(false)
     } finally {
       setLoading(false)
     }
   }
 
-  const handleGifSelect = (gif: GifData) => {
-    const gifUrl = gif.media_formats.gif?.url || gif.media_formats.tinygif?.url
+  const handleGifSelect = (gif: any) => {
+    const gifUrl = gif.images?.fixed_height?.url || gif.images?.original?.url
     if (gifUrl) {
       onSelectGif(gifUrl)
       onClose()
@@ -149,7 +154,7 @@ export default function GifSelector({ isOpen, onClose, onSelectGif, isMobile }: 
   const handleClose = () => {
     setSearchTerm('')
     setGifs([])
-    setNextPos('')
+    setOffset(0)
     setHasMore(true)
     onClose()
   }
@@ -224,10 +229,14 @@ export default function GifSelector({ isOpen, onClose, onSelectGif, isMobile }: 
                   className="relative cursor-pointer rounded-lg overflow-hidden hover:ring-2 hover:ring-slate-500 transition-all group"
                 >
                   <img
-                    src={gif.media_formats.tinygif?.url || gif.media_formats.gif?.url}
-                    alt={gif.title}
+                    src={gif.images?.fixed_height_small?.url || gif.images?.fixed_height?.url}
+                    alt={gif.title || 'GIF'}
                     className="w-full h-24 object-cover"
                     loading="lazy"
+                    onError={(e) => {
+                      const target = e.target as HTMLImageElement
+                      target.style.display = 'none'
+                    }}
                   />
                   <div className="absolute inset-0 bg-black/0 group-hover:bg-black/20 transition-colors" />
                 </div>
@@ -245,7 +254,7 @@ export default function GifSelector({ isOpen, onClose, onSelectGif, isMobile }: 
         <div className="p-2 border-t border-gray-600">
           <div className="flex items-center justify-center">
             <span className={`text-gray-500 ${isMobile ? 'text-xs' : 'text-xs'}`}>
-              Powered by Tenor
+              Powered by GIPHY
             </span>
           </div>
         </div>
