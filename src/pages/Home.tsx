@@ -67,32 +67,40 @@ export default function Home() {
     return () => window.removeEventListener('resize', checkMobile)
   }, [])
 
+  // Suscripción a mensajes con el nuevo sistema optimizado
   useEffect(() => {
     if (!activeServerId || !activeChannelId || !currentUser) {
       setMessages([])
       return
     }
 
+    console.log('Setting up message subscription for:', { activeServerId, activeChannelId })
+
     const unsubscribe = messageService.subscribeToMessages(
       activeServerId,
       activeChannelId,
       (newMessages) => {
+        console.log('Received messages update:', newMessages.length)
         setMessages(newMessages)
       },
       currentUser.uid
     )
 
-    return unsubscribe
+    return () => {
+      console.log('Cleaning up message subscription')
+      unsubscribe()
+    }
   }, [activeServerId, activeChannelId, currentUser])
 
   useEffect(() => {
     if (activeServer) {
       const defaultChannel = activeServer.channels.find(ch => ch.name === 'general')
-      if (defaultChannel) {
+      if (defaultChannel && defaultChannel.id !== activeChannelId) {
         setActiveChannelId(defaultChannel.id)
+        localStorage.setItem('dogicord-active-channel', defaultChannel.id)
       }
     }
-  }, [activeServer])
+  }, [activeServer, activeChannelId])
 
   const updateUserRoles = useCallback((newRoles: Role[]) => {
     const oldRoleNames = userRoles.map(r => r.name).sort()
@@ -206,6 +214,8 @@ export default function Home() {
 
   const handleServerSelect = (serverId: string) => {
     selectServer(serverId)
+    // Limpiar mensajes cuando cambia de servidor
+    setMessages([])
     if (isMobile) setMobileView('channels')
   }
 
@@ -236,8 +246,11 @@ export default function Home() {
         }
       }
 
+      // Limpiar mensajes antes de cambiar de canal
+      setMessages([])
       setActiveChannelId(channelId)
       localStorage.setItem('dogicord-active-channel', channelId)
+      
       if (isMobile) {
         setMobileView('chat')
         setShowMobileNav(false)
@@ -249,6 +262,7 @@ export default function Home() {
 
   const handleSendMessage = async (content: string) => {
     if (!activeServerId || !activeChannelId || !currentUser || !userProfile) {
+      setError('Missing required information to send message')
       return
     }
 
@@ -258,6 +272,8 @@ export default function Home() {
     }
 
     try {
+      console.log('Sending message:', { content, activeServerId, activeChannelId })
+      
       const validation = await messageService.validateMessageContent(content, userRoles, isOwner())
       if (!validation.valid) {
         setError(validation.reason || 'Invalid message content')
@@ -273,8 +289,10 @@ export default function Home() {
         activeChannelId
       )
       
+      console.log('Message sent successfully')
       setError('')
     } catch (error: any) {
+      console.error('Failed to send message:', error)
       setError(error.message)
     }
   }

@@ -1,4 +1,3 @@
-// src/types/member.ts
 import type { Role } from './permissions'
 
 export interface Member {

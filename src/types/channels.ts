@@ -1,4 +1,4 @@
-// src/types/channels.ts
+
 export interface ChannelPermission {
   roleId: string
   allow: string[]

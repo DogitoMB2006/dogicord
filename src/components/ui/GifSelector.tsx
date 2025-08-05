@@ -1,4 +1,4 @@
-// src/components/ui/GifSelector.tsx
+
 import { useState, useEffect, useRef } from 'react'
 
 interface GifSelectorProps {

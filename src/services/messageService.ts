@@ -1,4 +1,4 @@
-// src/services/messageService.ts
+
 import { 
   collection, 
   addDoc, 
@@ -11,11 +11,7 @@ import {
   doc,
   updateDoc,
   deleteDoc,
-  getDoc,
-  limit,
-  startAfter,
-  DocumentSnapshot,
-  getDocs
+  getDoc
 } from 'firebase/firestore'
 import { db } from '../config/firebase'
 import { serverService } from './serverService'
@@ -37,7 +33,6 @@ export interface Message {
 
 interface MessageCache {
   messages: Message[]
-  lastVisible?: DocumentSnapshot
   hasMore: boolean
   isLoading: boolean
 }
@@ -45,25 +40,9 @@ interface MessageCache {
 class MessageService {
   private messageCache = new Map<string, MessageCache>()
   private activeListeners = new Map<string, () => void>()
-  private realtimeListeners = new Map<string, () => void>()
-  private MESSAGES_PER_LOAD = 50
-  private CACHE_EXPIRY = 5 * 60 * 1000 // 5 minutos
-  private lastCacheClean = Date.now()
 
   private getCacheKey(serverId: string, channelId: string): string {
     return `${serverId}-${channelId}`
-  }
-
-  private cleanExpiredCache(): void {
-    const now = Date.now()
-    if (now - this.lastCacheClean < 60000) return
-
-    this.messageCache.forEach((_, key) => {
-      if (now - this.lastCacheClean > this.CACHE_EXPIRY) {
-        this.messageCache.delete(key)
-      }
-    })
-    this.lastCacheClean = now
   }
 
   async sendMessage(
@@ -109,6 +88,7 @@ class MessageService {
         throw new Error('Message too long (max 2000 characters)')
       }
 
+      // Enviar mensaje a Firestore
       await addDoc(collection(db, 'messages'), {
         content,
         authorId,
@@ -120,11 +100,10 @@ class MessageService {
         edited: false
       })
 
-      // Invalidar cache para forzar recarga
-      const cacheKey = this.getCacheKey(serverId, channelId)
-      this.messageCache.delete(cacheKey)
+      console.log('Message sent to Firestore successfully')
 
     } catch (error: any) {
+      console.error('Error sending message:', error)
       throw new Error(error.message)
     }
   }
@@ -184,17 +163,6 @@ class MessageService {
         editedAt: serverTimestamp()
       })
 
-      // Actualizar cache local si existe
-      const cacheKey = this.getCacheKey(messageData.serverId, messageData.channelId)
-      const cache = this.messageCache.get(cacheKey)
-      if (cache) {
-        cache.messages = cache.messages.map(msg => 
-          msg.id === messageId 
-            ? { ...msg, content: newContent, edited: true, editedAt: new Date() }
-            : msg
-        )
-      }
-
     } catch (error: any) {
       throw new Error(error.message)
     }
@@ -237,13 +205,6 @@ class MessageService {
 
       await deleteDoc(messageRef)
 
-      // Remover del cache local si existe
-      const cacheKey = this.getCacheKey(messageData.serverId, messageData.channelId)
-      const cache = this.messageCache.get(cacheKey)
-      if (cache) {
-        cache.messages = cache.messages.filter(msg => msg.id !== messageId)
-      }
-
     } catch (error: any) {
       throw new Error(error.message)
     }
@@ -263,141 +224,47 @@ class MessageService {
       existingListener()
     }
 
-    // Limpiar listener de tiempo real anterior
-    const existingRealtimeListener = this.realtimeListeners.get(cacheKey)
-    if (existingRealtimeListener) {
-      existingRealtimeListener()
-    }
+    console.log('Setting up message subscription for:', cacheKey)
 
-    this.cleanExpiredCache()
-
-    // Cargar mensajes iniciales
-    this.loadInitialMessages(serverId, channelId, userId).then(initialMessages => {
-      callback(initialMessages)
-      
-      // Configurar listener de tiempo real solo para mensajes nuevos
-      this.setupRealtimeListener(serverId, channelId, userId, callback)
-    })
-
-    const cleanup = () => {
-      const realtimeListener = this.realtimeListeners.get(cacheKey)
-      if (realtimeListener) {
-        realtimeListener()
-        this.realtimeListeners.delete(cacheKey)
-      }
-      this.activeListeners.delete(cacheKey)
-    }
-
-    this.activeListeners.set(cacheKey, cleanup)
-    return cleanup
-  }
-
-  private async loadInitialMessages(
-    serverId: string,
-    channelId: string,
-    userId?: string
-  ): Promise<Message[]> {
-    const cacheKey = this.getCacheKey(serverId, channelId)
-    let cache = this.messageCache.get(cacheKey)
-
-    if (cache && cache.messages.length > 0) {
-      return cache.messages
-    }
-
-    if (userId) {
-      const hasPermission = await this.checkChannelPermissions(serverId, channelId, userId)
-      if (!hasPermission.canView) {
-        return []
-      }
-    }
-
-    try {
-      // Cargar últimos mensajes
-      const q = query(
-        collection(db, 'messages'),
-        where('serverId', '==', serverId),
-        where('channelId', '==', channelId),
-        orderBy('timestamp', 'desc'),
-        limit(this.MESSAGES_PER_LOAD)
-      )
-
-      const querySnapshot = await getDocs(q)
-      const messages: Message[] = []
-      let lastVisible: DocumentSnapshot | undefined
-
-      querySnapshot.forEach((doc) => {
-        const data = doc.data()
-        messages.unshift({
-          id: doc.id,
-          content: data.content,
-          authorId: data.authorId,
-          authorName: data.authorName,
-          authorAvatarUrl: data.authorAvatarUrl || undefined,
-          serverId: data.serverId,
-          channelId: data.channelId,
-          timestamp: data.timestamp ? (data.timestamp as Timestamp).toDate() : new Date(),
-          edited: data.edited,
-          editedAt: data.editedAt ? (data.editedAt as Timestamp).toDate() : undefined
-        })
-      })
-
-      if (querySnapshot.docs.length > 0) {
-        lastVisible = querySnapshot.docs[querySnapshot.docs.length - 1]
-      }
-
-      cache = {
-        messages,
-        lastVisible,
-        hasMore: querySnapshot.docs.length === this.MESSAGES_PER_LOAD,
-        isLoading: false
-      }
-      this.messageCache.set(cacheKey, cache)
-
-      return messages
-    } catch (error) {
-      console.error('Error loading initial messages:', error)
-      return []
-    }
-  }
-
-  private setupRealtimeListener(
-    serverId: string,
-    channelId: string,
-    userId: string | undefined,
-    callback: (messages: Message[]) => void
-  ): void {
-    const cacheKey = this.getCacheKey(serverId, channelId)
-    const cache = this.messageCache.get(cacheKey)
-    
-    // Obtener timestamp del último mensaje para solo escuchar nuevos
-    const lastMessageTime = cache?.messages.length ? 
-      cache.messages[cache.messages.length - 1].timestamp : 
-      new Date(Date.now() - 60000) // Últimos 60 segundos por seguridad
-
-    // Query solo para mensajes nuevos
+    // Configurar listener en tiempo real simple y directo
     const q = query(
       collection(db, 'messages'),
       where('serverId', '==', serverId),
       where('channelId', '==', channelId),
-      where('timestamp', '>', lastMessageTime),
       orderBy('timestamp', 'asc')
     )
 
     const unsubscribe = onSnapshot(q, async (querySnapshot) => {
-      if (querySnapshot.empty) return
-
+      console.log('Message snapshot received, docs count:', querySnapshot.docs.length)
+      
+      // Verificar permisos si hay userId
       if (userId) {
-        const hasPermission = await this.checkChannelPermissions(serverId, channelId, userId)
-        if (!hasPermission.canView) {
+        try {
+          const hasPermission = await this.checkChannelPermissions(serverId, channelId, userId)
+          if (!hasPermission.canView) {
+            console.log('User does not have permission to view channel')
+            callback([])
+            return
+          }
+        } catch (error) {
+          console.error('Error checking permissions for messages:', error)
           callback([])
           return
         }
       }
 
-      const newMessages: Message[] = []
+      const messages: Message[] = []
+      
       querySnapshot.forEach((doc) => {
         const data = doc.data()
-        newMessages.push({
+        const messageDate = data.timestamp ? (data.timestamp as Timestamp).toDate() : new Date()
+
+        // Si no tiene permiso de historial, solo mostrar mensajes recientes
+        if (userId) {
+          // Por ahora mostrar todos los mensajes - se puede optimizar después
+        }
+
+        messages.push({
           id: doc.id,
           content: data.content,
           authorId: data.authorId,
@@ -405,39 +272,26 @@ class MessageService {
           authorAvatarUrl: data.authorAvatarUrl || undefined,
           serverId: data.serverId,
           channelId: data.channelId,
-          timestamp: data.timestamp ? (data.timestamp as Timestamp).toDate() : new Date(),
+          timestamp: messageDate,
           edited: data.edited,
           editedAt: data.editedAt ? (data.editedAt as Timestamp).toDate() : undefined
         })
       })
 
-      // Actualizar cache con nuevos mensajes
-      const currentCache = this.messageCache.get(cacheKey)
-      if (currentCache) {
-        const updatedMessages = [...currentCache.messages]
-        
-        newMessages.forEach(newMsg => {
-          const existingIndex = updatedMessages.findIndex(msg => msg.id === newMsg.id)
-          if (existingIndex >= 0) {
-            updatedMessages[existingIndex] = newMsg
-          } else {
-            updatedMessages.push(newMsg)
-          }
-        })
-
-        const maxCacheSize = this.MESSAGES_PER_LOAD * 2
-        if (updatedMessages.length > maxCacheSize) {
-          updatedMessages.splice(0, updatedMessages.length - maxCacheSize)
-        }
-
-        currentCache.messages = updatedMessages
-        callback(updatedMessages)
-      }
+      console.log('Processed messages:', messages.length)
+      callback(messages)
     }, (error) => {
-      console.error('Error in realtime message listener:', error)
+      console.error('Error in message subscription:', error)
+      callback([])
     })
 
-    this.realtimeListeners.set(cacheKey, unsubscribe)
+    const cleanup = () => {
+      console.log('Cleaning up message subscription for:', cacheKey)
+      unsubscribe()
+    }
+
+    this.activeListeners.set(cacheKey, cleanup)
+    return cleanup
   }
 
   private async checkChannelPermissions(serverId: string, channelId: string, userId: string): Promise<{
@@ -464,59 +318,6 @@ class MessageService {
     } catch (error) {
       console.error('Error checking channel permissions:', error)
       return { canView: false, canReadHistory: false }
-    }
-  }
-
-  async loadMoreMessages(serverId: string, channelId: string): Promise<Message[]> {
-    const cacheKey = this.getCacheKey(serverId, channelId)
-    const cache = this.messageCache.get(cacheKey)
-
-    if (!cache || !cache.hasMore || cache.isLoading) {
-      return cache?.messages || []
-    }
-
-    cache.isLoading = true
-
-    try {
-      const q = query(
-        collection(db, 'messages'),
-        where('serverId', '==', serverId),
-        where('channelId', '==', channelId),
-        orderBy('timestamp', 'desc'),
-        startAfter(cache.lastVisible),
-        limit(this.MESSAGES_PER_LOAD)
-      )
-
-      const querySnapshot = await getDocs(q)
-      const olderMessages: Message[] = []
-
-      querySnapshot.forEach((doc) => {
-        const data = doc.data()
-        olderMessages.unshift({
-          id: doc.id,
-          content: data.content,
-          authorId: data.authorId,
-          authorName: data.authorName,
-          authorAvatarUrl: data.authorAvatarUrl || undefined,
-          serverId: data.serverId,
-          channelId: data.channelId,
-          timestamp: data.timestamp ? (data.timestamp as Timestamp).toDate() : new Date(),
-          edited: data.edited,
-          editedAt: data.editedAt ? (data.editedAt as Timestamp).toDate() : undefined
-        })
-      })
-
-      cache.messages = [...olderMessages, ...cache.messages]
-      cache.lastVisible = querySnapshot.docs.length > 0 ? 
-        querySnapshot.docs[querySnapshot.docs.length - 1] : cache.lastVisible
-      cache.hasMore = querySnapshot.docs.length === this.MESSAGES_PER_LOAD
-      cache.isLoading = false
-
-      return cache.messages
-    } catch (error) {
-      console.error('Error loading more messages:', error)
-      cache.isLoading = false
-      return cache.messages
     }
   }
 
@@ -596,6 +397,11 @@ class MessageService {
     } catch (error: any) {
       return { canSend: false, reason: error.message }
     }
+  }
+
+  // Método para debug - verificar estado de listeners
+  getActiveListeners(): string[] {
+    return Array.from(this.activeListeners.keys())
   }
 }
 

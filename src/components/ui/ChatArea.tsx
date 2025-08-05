@@ -1,4 +1,4 @@
-// src/components/ui/ChatArea.tsx
+
 import { useState, useRef, useEffect } from 'react'
 import type { Message } from '../../services/messageService'
 import { messageService } from '../../services/messageService'
@@ -46,6 +46,7 @@ export default function ChatArea({
   const [showGifSelector, setShowGifSelector] = useState(false)
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const messagesContainerRef = useRef<HTMLDivElement>(null)
+  const messageInputRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
     if (!isScrolledUp) {
@@ -58,6 +59,20 @@ export default function ChatArea({
       onHideMobileNav()
     }
   }, [isMobile, onHideMobileNav])
+
+
+  useEffect(() => {
+    if (canSendMessages && messageInputRef.current) {
+      messageInputRef.current.focus()
+    }
+  }, [canSendMessages])
+
+
+  useEffect(() => {
+    if (!sending && canSendMessages && messageInputRef.current) {
+      messageInputRef.current.focus()
+    }
+  }, [sending, canSendMessages])
 
   const handleScroll = (e: React.UIEvent<HTMLDivElement>) => {
     const container = e.currentTarget
@@ -78,11 +93,24 @@ export default function ChatArea({
       try {
         await onSendMessage(message.trim())
         setMessage('')
+  
+        setTimeout(() => {
+          if (messageInputRef.current) {
+            messageInputRef.current.focus()
+          }
+        }, 0)
       } catch (error) {
         console.error('Failed to send message:', error)
       } finally {
         setSending(false)
       }
+    }
+  }
+
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault()
+      handleSubmit(e)
     }
   }
 
@@ -92,6 +120,12 @@ export default function ChatArea({
       try {
         await onSendMessage(gifUrl)
         setShowGifSelector(false)
+        // Mantener focus después de enviar GIF
+        setTimeout(() => {
+          if (messageInputRef.current) {
+            messageInputRef.current.focus()
+          }
+        }, 0)
       } catch (error) {
         console.error('Failed to send GIF:', error)
       } finally {
@@ -157,6 +191,16 @@ export default function ChatArea({
       return 'You do not have permission to send messages'
     }
     return `Message #${channelName}`
+  }
+
+  const handleInputFocus = () => {
+    // Asegurar que el GIF selector se cierre cuando se enfoca el input
+    setShowGifSelector(false)
+  }
+
+  const handleInputClick = () => {
+    // Cerrar GIF selector al hacer click en el input
+    setShowGifSelector(false)
   }
 
   return (
@@ -263,23 +307,35 @@ export default function ChatArea({
         <form onSubmit={handleSubmit}>
           <div className="relative">
             <input
+              ref={messageInputRef}
               type="text"
               value={message}
               onChange={(e) => setMessage(e.target.value)}
+              onKeyDown={handleKeyDown}
+              onFocus={handleInputFocus}
+              onClick={handleInputClick}
               placeholder={getMessageInputPlaceholder()}
               disabled={sending || !canSendMessages}
               className={`w-full px-3 md:px-4 py-2 md:py-3 pr-16 md:pr-20 bg-gray-600 border-none rounded-lg text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-slate-500 disabled:bg-gray-700 disabled:cursor-not-allowed ${isMobile ? 'text-sm' : 'text-base'} ${
                 !canSendMessages ? 'opacity-60' : ''
               }`}
               maxLength={2000}
+              autoComplete="off"
+              autoCorrect="off"
+              spellCheck="false"
             />
             <div className="absolute right-2 top-1/2 transform -translate-y-1/2 flex items-center space-x-1">
               {canSendMessages && (
                 <button
                   type="button"
-                  onClick={() => setShowGifSelector(!showGifSelector)}
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    setShowGifSelector(!showGifSelector)
+                  }}
                   disabled={sending || !canSendMessages}
-                  className={`p-1 md:p-2 text-gray-400 hover:text-white disabled:text-gray-500 transition-colors`}
+                  className={`p-1 md:p-2 text-gray-400 hover:text-white disabled:text-gray-500 transition-colors ${
+                    showGifSelector ? 'text-white' : ''
+                  }`}
                 >
                   <svg className={`${isMobile ? 'w-4 h-4' : 'w-5 h-5'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 4V2a1 1 0 011-1h8a1 1 0 011 1v2m0 0V1a1 1 0 011-1h2a1 1 0 011 1v18a1 1 0 01-1 1H4a1 1 0 01-1-1V1a1 1 0 011-1h2a1 1 0 011 1v3m0 0h8m-8 0H5a1 1 0 00-1 1v3m0 0h16" />
@@ -312,7 +368,15 @@ export default function ChatArea({
         {canSendMessages && (
           <GifSelector
             isOpen={showGifSelector}
-            onClose={() => setShowGifSelector(false)}
+            onClose={() => {
+              setShowGifSelector(false)
+          
+              setTimeout(() => {
+                if (messageInputRef.current) {
+                  messageInputRef.current.focus()
+                }
+              }, 0)
+            }}
             onSelectGif={handleGifSelect}
             isMobile={isMobile}
           />

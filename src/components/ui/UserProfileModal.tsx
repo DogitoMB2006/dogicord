@@ -1,4 +1,4 @@
-// src/components/ui/UserProfileModal.tsx
+
 import { useState, useEffect } from 'react'
 import { authService } from '../../services/authService'
 import { serverService } from '../../services/serverService'

@@ -1,4 +1,4 @@
-// src/services/presenceService.ts
+
 import { ref, onValue, set, onDisconnect, serverTimestamp, get } from 'firebase/database'
 import { getDatabase } from 'firebase/database'
 import app from '../config/firebase'
@@ -57,16 +57,16 @@ class PresenceService {
       const userPresenceRef = ref(this.database, `presence/${userId}`)
       
       if (document.hidden) {
-        // Usuario cambió de pestaña pero sigue conectado
+   
         set(userPresenceRef, {
-          isOnline: true, // Mantener online
+          isOnline: true,
           lastSeen: serverTimestamp(),
           serverId: serverId || null,
           timestamp: serverTimestamp(),
           tabVisible: false
         })
       } else {
-        // Usuario regresó a la pestaña
+     
         set(userPresenceRef, {
           isOnline: true,
           lastSeen: serverTimestamp(),
@@ -80,7 +80,7 @@ class PresenceService {
     const handleBeforeUnload = () => {
       if (this.currentUserId) {
         const userPresenceRef = ref(this.database, `presence/${this.currentUserId}`)
-        // Solo desconectar cuando realmente cierre la pestaña/navegador
+      
         navigator.sendBeacon?.(`data:application/json,${JSON.stringify({
           action: 'setOffline',
           userId: this.currentUserId
@@ -94,10 +94,10 @@ class PresenceService {
       }
     }
 
-    // Solo escuchar cambios de visibilidad para actualizar estado de pestaña
+    
     document.addEventListener('visibilitychange', handleVisibilityChange)
     
-    // Detectar cierre real de pestaña/navegador
+
     window.addEventListener('beforeunload', handleBeforeUnload)
     window.addEventListener('unload', handleBeforeUnload)
 
@@ -109,17 +109,17 @@ class PresenceService {
   }
 
   private startHeartbeat(userId: string, serverId?: string): void {
-    // Heartbeat más frecuente para mantener conexión activa
+
     this.heartbeatInterval = setInterval(() => {
       const userPresenceRef = ref(this.database, `presence/${userId}`)
       set(userPresenceRef, {
-        isOnline: true, // Siempre online mientras el heartbeat funcione
+        isOnline: true, 
         lastSeen: serverTimestamp(),
         serverId: serverId || null,
         timestamp: serverTimestamp(),
         tabVisible: !document.hidden
       })
-    }, 15000) // Cada 15 segundos
+    }, 15000) 
   }
 
   subscribeToUserPresence(userId: string, callback: (presence: UserPresence) => void): () => void {
@@ -271,7 +271,7 @@ class PresenceService {
     }
   }
 
-  // Método para forzar estado online (útil para debugging)
+
   forceOnline(userId?: string, serverId?: string): void {
     const targetUserId = userId || this.currentUserId
     if (!targetUserId) return
