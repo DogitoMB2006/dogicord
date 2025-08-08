@@ -30,6 +30,11 @@ export interface Message {
   timestamp: Date
   edited?: boolean
   editedAt?: Date
+  replyTo?: {
+    messageId: string
+    authorName: string
+    content: string
+  }
 }
 
 interface MessageCache {
@@ -52,7 +57,6 @@ class MessageService {
   private cleanupInitialized = false
 
   constructor() {
-    // Inicializar limpieza automática solo una vez
     if (!this.cleanupInitialized) {
       this.initializeCleanup()
       this.cleanupInitialized = true
@@ -70,13 +74,12 @@ class MessageService {
   private saveMessagesToLocalStorage(serverId: string, channelId: string, messages: Message[]): void {
     try {
       const cacheData: CachedChannelData = {
-        messages: messages.slice(-100), // Solo guardar los últimos 100 mensajes
+        messages: messages.slice(-100), 
         lastUpdated: Date.now()
       }
       const key = this.getLocalStorageKey(serverId, channelId)
       localStorage.setItem(key, JSON.stringify(cacheData))
       
-      // Limpiar caché viejo
       this.cleanupOldCache()
     } catch (error) {
       console.warn('Failed to save messages to localStorage:', error)
@@ -92,13 +95,11 @@ class MessageService {
       
       const cacheData: CachedChannelData = JSON.parse(cached)
       
-      // Verificar si el caché no está expirado
       if (Date.now() - cacheData.lastUpdated > this.CACHE_EXPIRY_MS) {
         localStorage.removeItem(key)
         return []
       }
       
-      // Convertir timestamps de string a Date
       return cacheData.messages.map(msg => ({
         ...msg,
         timestamp: new Date(msg.timestamp),
@@ -116,7 +117,6 @@ class MessageService {
       
       if (keys.length <= this.MAX_CACHED_CHANNELS) return
       
-      // Ordenar por última actualización y eliminar los más viejos
       const cacheInfo = keys.map(key => {
         try {
           const data = JSON.parse(localStorage.getItem(key) || '{}')
@@ -137,13 +137,10 @@ class MessageService {
   private mergeMessages(cachedMessages: Message[], realtimeMessages: Message[]): Message[] {
     const messageMap = new Map<string, Message>()
     
-    // Agregar mensajes en caché
     cachedMessages.forEach(msg => messageMap.set(msg.id, msg))
     
-    // Agregar/actualizar con mensajes en tiempo real
     realtimeMessages.forEach(msg => messageMap.set(msg.id, msg))
     
-    // Convertir de vuelta a array y ordenar
     return Array.from(messageMap.values())
       .sort((a, b) => a.timestamp.getTime() - b.timestamp.getTime())
   }
@@ -154,7 +151,8 @@ class MessageService {
     authorName: string,
     authorAvatarUrl: string | null,
     serverId: string, 
-    channelId: string
+    channelId: string,
+    replyTo?: { messageId: string; authorName: string; content: string }
   ): Promise<void> {
     try {
       const server = await serverService.getServer(serverId)
@@ -191,8 +189,7 @@ class MessageService {
         throw new Error('Message too long (max 2000 characters)')
       }
 
-      // Enviar mensaje a Firestore
-      await addDoc(collection(db, 'messages'), {
+      const messageData: any = {
         content,
         authorId,
         authorName,
@@ -201,7 +198,13 @@ class MessageService {
         channelId,
         timestamp: serverTimestamp(),
         edited: false
-      })
+      }
+
+      if (replyTo) {
+        messageData.replyTo = replyTo
+      }
+
+      await addDoc(collection(db, 'messages'), messageData)
 
       console.log('Message sent to Firestore successfully')
 
@@ -321,7 +324,6 @@ class MessageService {
   ): () => void {
     const cacheKey = this.getCacheKey(serverId, channelId)
     
-    // Limpiar listener anterior si existe
     const existingListener = this.activeListeners.get(cacheKey)
     if (existingListener) {
       existingListener()
@@ -329,14 +331,12 @@ class MessageService {
 
     console.log('Setting up message subscription for:', cacheKey)
 
-    // Cargar mensajes desde localStorage inmediatamente
     const cachedMessages = this.loadMessagesFromLocalStorage(serverId, channelId)
     if (cachedMessages.length > 0) {
       console.log('Loaded', cachedMessages.length, 'messages from cache')
       callback(cachedMessages)
     }
 
-    // Configurar listener en tiempo real
     const q = query(
       collection(db, 'messages'),
       where('serverId', '==', serverId),
@@ -347,7 +347,6 @@ class MessageService {
     const unsubscribe = onSnapshot(q, async (querySnapshot) => {
       console.log('Message snapshot received, docs count:', querySnapshot.docs.length)
       
-      // Verificar permisos si hay userId
       if (userId) {
         try {
           const hasPermission = await this.checkChannelPermissions(serverId, channelId, userId)
@@ -379,11 +378,11 @@ class MessageService {
           channelId: data.channelId,
           timestamp: messageDate,
           edited: data.edited,
-          editedAt: data.editedAt ? (data.editedAt as Timestamp).toDate() : undefined
+          editedAt: data.editedAt ? (data.editedAt as Timestamp).toDate() : undefined,
+          replyTo: data.replyTo || undefined
         })
       })
 
-      // Detectar mensajes nuevos para notificaciones
       const previousLength = this.messageCache.get(this.getCacheKey(serverId, channelId))?.messages.length || 0
       if (realtimeMessages.length > previousLength && userId) {
         const newMessages = realtimeMessages.slice(previousLength)
@@ -399,7 +398,6 @@ class MessageService {
         })
       }
 
-      // Actualizar caché en memoria
       this.messageCache.set(this.getCacheKey(serverId, channelId), {
         messages: realtimeMessages,
         lastUpdated: Date.now(),
@@ -407,17 +405,14 @@ class MessageService {
         isLoading: false
       })
 
-      // Fusionar mensajes en caché con mensajes en tiempo real
       const mergedMessages = this.mergeMessages(cachedMessages, realtimeMessages)
       
-      // Guardar en localStorage
       this.saveMessagesToLocalStorage(serverId, channelId, mergedMessages)
       
       console.log('Processed messages:', mergedMessages.length, '(cached:', cachedMessages.length, ', realtime:', realtimeMessages.length, ')')
       callback(mergedMessages)
     }, (error) => {
       console.error('Error in message subscription:', error)
-      // Si hay error, al menos mostrar los mensajes en caché
       if (cachedMessages.length > 0) {
         callback(cachedMessages)
       } else {
@@ -466,13 +461,11 @@ class MessageService {
       const cacheKey = this.getCacheKey(serverId, channelId)
       this.messageCache.delete(cacheKey)
       
-      // También limpiar localStorage
       const localStorageKey = this.getLocalStorageKey(serverId, channelId)
       localStorage.removeItem(localStorageKey)
     } else {
       this.messageCache.clear()
       
-      // Limpiar todo el localStorage de mensajes
       const keys = Object.keys(localStorage).filter(key => key.startsWith('dogicord-messages-'))
       keys.forEach(key => localStorage.removeItem(key))
     }
@@ -507,11 +500,9 @@ class MessageService {
     }
   }
 
-  // Inicializar limpieza automática al cargar
   private initializeCleanup(): void {
     this.clearExpiredCache()
     
-    // Limpiar caché expirado cada 5 minutos
     setInterval(() => {
       this.clearExpiredCache()
     }, 5 * 60 * 1000)
@@ -579,7 +570,6 @@ class MessageService {
     }
   }
 
-  // Método para debug - verificar estado de listeners
   getActiveListeners(): string[] {
     return Array.from(this.activeListeners.keys())
   }

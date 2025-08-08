@@ -5,11 +5,12 @@ import { messageService } from '../../services/messageService'
 import { notificationService } from '../../services/notificationService'
 import GifSelector from './GifSelector'
 import MessageItem from '../chat/MessageItem'
+import ReplyPreview from '../chat/ReplyPreview'
 
 interface ChatAreaProps {
   channelName: string
   messages: Message[]
-  onSendMessage: (content: string) => Promise<void>
+  onSendMessage: (content: string, replyTo?: { messageId: string; authorName: string; content: string }) => Promise<void>
   isMobile: boolean
   onBackToChannels?: () => void
   serverName: string
@@ -50,6 +51,7 @@ export default function ChatArea({
   const [, setLastReadMessageId] = useState<string | null>(null)
   const [hasScrolledToLastPosition, setHasScrolledToLastPosition] = useState(false)
   const [inputFocused, setInputFocused] = useState(false)
+  const [replyToMessage, setReplyToMessage] = useState<Message | null>(null)
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const messagesContainerRef = useRef<HTMLDivElement>(null)
   const messageInputRef = useRef<HTMLInputElement>(null)
@@ -58,18 +60,16 @@ export default function ChatArea({
   const allMessages = [...messages, ...optimisticMessages]
 
   useEffect(() => {
-    const channelKey = `scroll-${serverId}-${channelId}`
-    const savedScrollPosition = localStorage.getItem(channelKey)
     const container = messagesContainerRef.current
     
     if (container && allMessages.length > 0 && !hasScrolledToLastPosition) {
-      if (savedScrollPosition) {
-        const scrollTop = parseInt(savedScrollPosition)
-        container.scrollTop = scrollTop
-        setIsScrolledUp(scrollTop < container.scrollHeight - container.clientHeight - 50)
-      } else {
-        messagesEndRef.current?.scrollIntoView({ behavior: 'instant' })
-      }
+      // Force scroll to bottom
+      setTimeout(() => {
+        if (container) {
+          container.scrollTop = container.scrollHeight
+        }
+        setIsScrolledUp(false)
+      }, 150)
       setHasScrolledToLastPosition(true)
     }
   }, [allMessages, channelId, serverId, hasScrolledToLastPosition])
@@ -80,6 +80,7 @@ export default function ChatArea({
       setUnreadCount(0)
       setLastReadMessageId(null)
       setOptimisticMessages([])
+      setReplyToMessage(null) // Reset reply when changing channels
       previousMessagesLengthRef.current = messages.length
       
       const lastReadKey = `last-read-${serverId}-${channelId}`
@@ -165,7 +166,7 @@ export default function ChatArea({
     }
   }
 
-  const createOptimisticMessage = (content: string): Message => {
+  const createOptimisticMessage = (content: string, replyTo?: Message): Message => {
     const tempId = `temp-${Date.now()}-${Math.random()}`
     return {
       id: tempId,
@@ -175,7 +176,12 @@ export default function ChatArea({
       serverId: serverId || '',
       channelId: channelId || '',
       timestamp: new Date(),
-      edited: false
+      edited: false,
+      replyTo: replyTo ? {
+        messageId: replyTo.id,
+        authorName: replyTo.authorName,
+        content: replyTo.content
+      } : undefined
     }
   }
 
@@ -183,10 +189,12 @@ export default function ChatArea({
     e.preventDefault()
     if (message.trim() && !sending && canSendMessages) {
       const messageContent = message.trim()
+      const currentReply = replyToMessage
       setMessage('')
+      setReplyToMessage(null)
       
       // Crear mensaje optimista
-      const optimisticMessage = createOptimisticMessage(messageContent)
+      const optimisticMessage = createOptimisticMessage(messageContent, currentReply || undefined)
       setOptimisticMessages(prev => [...prev, optimisticMessage])
       
       // Scroll inmediato para mostrar el mensaje optimista
@@ -196,7 +204,13 @@ export default function ChatArea({
       
       setSending(true)
       try {
-        await onSendMessage(messageContent)
+        const replyData = currentReply ? {
+          messageId: currentReply.id,
+          authorName: currentReply.authorName,
+          content: currentReply.content
+        } : undefined
+
+        await onSendMessage(messageContent, replyData)
         
         // Remover mensaje optimista después de enviar exitosamente
         setTimeout(() => {
@@ -209,6 +223,7 @@ export default function ChatArea({
         setOptimisticMessages(prev => prev.filter(msg => msg.id !== optimisticMessage.id))
         // Restaurar el mensaje en el input
         setMessage(messageContent)
+        setReplyToMessage(currentReply)
       } finally {
         setSending(false)
         setTimeout(() => {
@@ -229,8 +244,11 @@ export default function ChatArea({
 
   const handleGifSelect = async (gifUrl: string) => {
     if (!sending && canSendMessages) {
+      const currentReply = replyToMessage
+      setReplyToMessage(null)
+      
       // Crear mensaje optimista para GIF
-      const optimisticMessage = createOptimisticMessage(gifUrl)
+      const optimisticMessage = createOptimisticMessage(gifUrl, currentReply || undefined)
       setOptimisticMessages(prev => [...prev, optimisticMessage])
       
       setShowGifSelector(false)
@@ -242,7 +260,13 @@ export default function ChatArea({
       }, 10)
       
       try {
-        await onSendMessage(gifUrl)
+        const replyData = currentReply ? {
+          messageId: currentReply.id,
+          authorName: currentReply.authorName,
+          content: currentReply.content
+        } : undefined
+
+        await onSendMessage(gifUrl, replyData)
         
         // Remover mensaje optimista después de enviar exitosamente
         setTimeout(() => {
@@ -253,6 +277,7 @@ export default function ChatArea({
         console.error('Failed to send GIF:', error)
         // Remover mensaje optimista en caso de error
         setOptimisticMessages(prev => prev.filter(msg => msg.id !== optimisticMessage.id))
+        setReplyToMessage(currentReply)
       } finally {
         setSending(false)
         setTimeout(() => {
@@ -313,12 +338,28 @@ export default function ChatArea({
     return currentDate !== previousDate
   }
 
+  const handleReplyToMessage = (message: Message) => {
+    setReplyToMessage(message)
+    setTimeout(() => {
+      if (messageInputRef.current) {
+        messageInputRef.current.focus()
+      }
+    }, 100)
+  }
+
+  const handleCancelReply = () => {
+    setReplyToMessage(null)
+  }
+
   const getMessageInputPlaceholder = (): string => {
     if (!canSendMessages) {
       if (sendMessageError) {
         return sendMessageError
       }
       return 'You do not have permission to send messages'
+    }
+    if (replyToMessage) {
+      return `Reply to ${replyToMessage.authorName}...`
     }
     return `Message #${channelName}`
   }
@@ -389,7 +430,7 @@ export default function ChatArea({
       <div 
         ref={messagesContainerRef}
         onScroll={handleScroll}
-        className={`flex-1 overflow-y-auto px-2 md:px-4 py-2 md:py-4 ${isMobile ? 'pb-24 pt-20 mobile-smooth-scroll mobile-gesture' : ''}`}
+        className={`flex-1 overflow-y-auto px-2 md:px-4 py-2 md:py-4 custom-scrollbar ${isMobile ? 'pb-24 pt-20 mobile-smooth-scroll mobile-gesture' : ''}`}
       >
         {allMessages.length === 0 ? (
           <div className="flex items-center justify-center h-full">
@@ -432,6 +473,7 @@ export default function ChatArea({
                     onEditMessage={handleEditMessage}
                     onDeleteMessage={handleDeleteMessage}
                     onUserClick={onUserClick}
+                    onReply={handleReplyToMessage}
                     isMobile={isMobile}
                     serverId={serverId}
                   />
@@ -444,6 +486,14 @@ export default function ChatArea({
       </div>
 
       <div className={`${isMobile ? 'fixed bottom-0 left-0 right-0 bg-gray-700 border-t border-gray-600 z-20' : ''} p-3 md:p-4 ${isMobile ? 'pb-6' : ''} relative`}>
+        {replyToMessage && (
+          <ReplyPreview
+            replyToMessage={replyToMessage}
+            onCancel={handleCancelReply}
+            isMobile={isMobile}
+          />
+        )}
+        
         {!canSendMessages && sendMessageError && (
           <div className="mb-2 p-2 bg-red-900/30 border border-red-700/50 rounded-lg">
             <p className="text-red-300 text-sm">{sendMessageError}</p>

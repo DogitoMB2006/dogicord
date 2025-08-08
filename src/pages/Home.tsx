@@ -81,7 +81,6 @@ export default function Home() {
     }
   }, [currentUser, servers])
 
-  // Suscripción a mensajes con el nuevo sistema optimizado
   useEffect(() => {
     if (!activeServerId || !activeChannelId || !currentUser) {
       setMessages([])
@@ -108,7 +107,6 @@ export default function Home() {
 
   useEffect(() => {
     if (activeServer) {
-      // Solo cambiar al canal general si no hay un canal activo válido en el servidor
       const currentChannelExists = activeServer.channels.find(ch => ch.id === activeChannelId)
       
       if (!currentChannelExists) {
@@ -117,7 +115,6 @@ export default function Home() {
           setActiveChannelId(defaultChannel.id)
           localStorage.setItem('dogicord-active-channel', defaultChannel.id)
         } else if (activeServer.channels.length > 0) {
-          // Si no hay canal 'general', usar el primer canal disponible
           setActiveChannelId(activeServer.channels[0].id)
           localStorage.setItem('dogicord-active-channel', activeServer.channels[0].id)
         }
@@ -267,10 +264,8 @@ export default function Home() {
         }
       }
 
-      // Marcar canal como leído al entrar
       notificationService.markChannelAsRead(activeServer.id, channelId)
 
-      // Cambiar canal - los mensajes se cargarán automáticamente por la suscripción
       setActiveChannelId(channelId)
       localStorage.setItem('dogicord-active-channel', channelId)
       
@@ -283,7 +278,7 @@ export default function Home() {
     }
   }
 
-  const handleSendMessage = async (content: string) => {
+  const handleSendMessage = async (content: string, replyTo?: { messageId: string; authorName: string; content: string }) => {
     if (!activeServerId || !activeChannelId || !currentUser || !userProfile) {
       setError('Missing required information to send message')
       return
@@ -295,7 +290,7 @@ export default function Home() {
     }
 
     try {
-      console.log('Sending message:', { content, activeServerId, activeChannelId })
+      console.log('Sending message:', { content, activeServerId, activeChannelId, replyTo })
       
       const validation = await messageService.validateMessageContent(content, userRoles, isOwner())
       if (!validation.valid) {
@@ -309,7 +304,8 @@ export default function Home() {
         userProfile.username,
         (userProfile as any).avatar || null,
         activeServerId,
-        activeChannelId
+        activeChannelId,
+        replyTo
       )
       
       console.log('Message sent successfully')
