@@ -1,4 +1,3 @@
-// src/components/ui/ChannelSidebar.tsx
 import { useState, useEffect } from 'react'
 import { useAuth } from '../../contexts/AuthContext'
 import { serverService } from '../../services/serverService'
@@ -334,8 +333,8 @@ export default function ChannelSidebar({
         )}
       </div>
 
-      <div className={`${isMobile ? 'h-16' : 'h-14'} bg-gray-850 flex items-center px-2 space-x-2 border-t border-gray-700`}>
-        <div className={`${isMobile ? 'w-10 h-10' : 'w-8 h-8'} bg-slate-600 rounded-full flex items-center justify-center flex-shrink-0 overflow-hidden ring-2 transition-all`}
+      <div className={`${isMobile ? 'h-20 pb-24' : 'h-14'} bg-gray-850 flex items-center px-3 space-x-3 border-t border-gray-700`}>
+        <div className={`${isMobile ? 'w-12 h-12' : 'w-8 h-8'} bg-slate-600 rounded-full flex items-center justify-center flex-shrink-0 overflow-hidden ring-2 transition-all`}
              style={{ '--tw-ring-color': userRoleColor } as React.CSSProperties}>
           {(userProfile as any)?.avatar ? (
             <img 
@@ -344,35 +343,35 @@ export default function ChannelSidebar({
               className="w-full h-full object-cover"
             />
           ) : (
-            <span className={`text-white font-medium ${isMobile ? 'text-base' : 'text-sm'}`}>
+            <span className={`text-white font-medium ${isMobile ? 'text-lg' : 'text-sm'}`}>
               {userProfile?.username?.charAt(0).toUpperCase() || 'U'}
             </span>
           )}
         </div>
         
         <div className="flex-1 min-w-0">
-          <div className={`${isMobile ? 'text-base' : 'text-sm'} font-medium truncate`}
+          <div className={`${isMobile ? 'text-lg' : 'text-sm'} font-medium truncate`}
                style={{ color: userRoleColor }}>
             {userProfile?.username || 'User'}
           </div>
-          <div className={`${isMobile ? 'text-sm' : 'text-xs'} text-gray-400`}>Online</div>
+          <div className={`${isMobile ? 'text-base' : 'text-xs'} text-gray-400`}>Online</div>
         </div>
 
-        <div className="flex space-x-1">
+        <div className="flex space-x-2">
           <button 
             onClick={onOpenProfileModal}
-            className={`${isMobile ? 'p-2' : 'p-1'} text-gray-400 hover:text-white hover:bg-gray-700 rounded transition-colors`}
+            className={`${isMobile ? 'p-3' : 'p-1'} text-gray-400 hover:text-white hover:bg-gray-700 rounded transition-colors mobile-touch-target`}
           >
-            <svg className={`${isMobile ? 'w-5 h-5' : 'w-4 h-4'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <svg className={`${isMobile ? 'w-6 h-6' : 'w-4 h-4'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
             </svg>
           </button>
           
           <button 
             onClick={logout}
-            className={`${isMobile ? 'p-2' : 'p-1'} text-gray-400 hover:text-red-400 hover:bg-gray-700 rounded transition-colors`}
+            className={`${isMobile ? 'p-3' : 'p-1'} text-gray-400 hover:text-red-400 hover:bg-gray-700 rounded transition-colors mobile-touch-target`}
           >
-            <svg className={`${isMobile ? 'w-5 h-5' : 'w-4 h-4'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <svg className={`${isMobile ? 'w-6 h-6' : 'w-4 h-4'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
             </svg>
           </button>

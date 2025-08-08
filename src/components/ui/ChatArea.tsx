@@ -15,8 +15,7 @@ interface ChatAreaProps {
   serverName: string
   serverId?: string
   channelId?: string
-  onShowMobileNav?: () => void
-  onHideMobileNav?: () => void
+
   onToggleMemberList?: () => void
   onUserClick?: (userId: string) => void
   currentUserId: string
@@ -34,8 +33,7 @@ export default function ChatArea({
   serverName,
   serverId,
   channelId,
-  onShowMobileNav,
-  onHideMobileNav,
+
   onToggleMemberList,
   onUserClick,
   currentUserId,
@@ -57,7 +55,6 @@ export default function ChatArea({
   const messageInputRef = useRef<HTMLInputElement>(null)
   const previousMessagesLengthRef = useRef(messages.length)
 
-  // Combinar mensajes reales con optimistas
   const allMessages = [...messages, ...optimisticMessages]
 
   useEffect(() => {
@@ -116,11 +113,7 @@ export default function ChatArea({
     previousMessagesLengthRef.current = allMessages.length
   }, [allMessages, channelId, serverId, currentUserId])
 
-  useEffect(() => {
-    if (isMobile && onHideMobileNav) {
-      onHideMobileNav()
-    }
-  }, [isMobile, onHideMobileNav])
+
 
   useEffect(() => {
     if (canSendMessages && messageInputRef.current) {
@@ -148,25 +141,13 @@ export default function ChatArea({
         localStorage.setItem(lastReadKey, lastMessage.id)
         setLastReadMessageId(lastMessage.id)
         
-        // Marcar canal como leído
+       
         notificationService.markChannelAsRead(serverId, channelId)
       }
     }
     
     const channelKey = `scroll-${serverId}-${channelId}`
     localStorage.setItem(channelKey, container.scrollTop.toString())
-    
-    // Solo mostrar/ocultar navegación mobile si hay scroll significativo
-    if (isMobile) {
-      const scrollThreshold = 100
-      const hasScrolledSignificantly = container.scrollTop > scrollThreshold
-      
-      if (onShowMobileNav && hasScrolledSignificantly && !isAtBottom) {
-        onShowMobileNav()
-      } else if (onHideMobileNav && (isAtBottom || !hasScrolledSignificantly)) {
-        onHideMobileNav()
-      }
-    }
   }
 
   const scrollToBottom = () => {
@@ -179,7 +160,7 @@ export default function ChatArea({
       localStorage.setItem(lastReadKey, lastMessage.id)
       setLastReadMessageId(lastMessage.id)
       
-      // Marcar canal como leído
+     
       notificationService.markChannelAsRead(serverId, channelId)
     }
   }
@@ -376,7 +357,6 @@ export default function ChatArea({
             <button
               onClick={() => {
                 onBackToChannels()
-                if (onShowMobileNav) onShowMobileNav()
               }}
               className="mr-3 p-2 text-gray-400 hover:text-white transition-colors mobile-touch-target"
             >

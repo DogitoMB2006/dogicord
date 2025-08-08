@@ -1,4 +1,3 @@
-// src/pages/Home.tsx
 import { useState, useEffect, useCallback } from 'react'
 import { useServer } from '../contexts/ServerContext'
 import { useAuth } from '../contexts/AuthContext'
@@ -238,8 +237,6 @@ export default function Home() {
 
   const handleServerSelect = (serverId: string) => {
     selectServer(serverId)
-    // Limpiar mensajes cuando cambia de servidor
-    setMessages([])
     if (isMobile) setMobileView('channels')
   }
 
@@ -273,8 +270,7 @@ export default function Home() {
       // Marcar canal como leído al entrar
       notificationService.markChannelAsRead(activeServer.id, channelId)
 
-      // Limpiar mensajes antes de cambiar de canal
-      setMessages([])
+      // Cambiar canal - los mensajes se cargarán automáticamente por la suscripción
       setActiveChannelId(channelId)
       localStorage.setItem('dogicord-active-channel', channelId)
       
@@ -538,8 +534,7 @@ export default function Home() {
               serverName={activeServer.name}
               serverId={activeServerId}
               channelId={activeChannelId}
-              onShowMobileNav={() => setShowMobileNav(true)}
-              onHideMobileNav={() => setShowMobileNav(false)}
+
               onToggleMemberList={handleToggleMemberList}
               onUserClick={handleUserClick}
               currentUserId={currentUser?.uid || ''}
