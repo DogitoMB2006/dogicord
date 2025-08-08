@@ -20,13 +20,13 @@ class GlobalMessageListener {
 
     this.isListening = true
 
-    // Crear un listener para cada servidor para evitar limitaciones de Firestore
+   
     userServers.forEach(serverId => {
       const q = query(
         collection(db, 'messages'),
         where('serverId', '==', serverId),
         orderBy('timestamp', 'desc'),
-        limit(50) // Limitar a los últimos 50 mensajes por servidor
+        limit(50) 
       )
 
       const unsubscribe = onSnapshot(q, (querySnapshot) => {

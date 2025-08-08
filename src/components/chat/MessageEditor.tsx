@@ -62,7 +62,7 @@ export default function MessageEditor({ initialContent, onSave, onCancel, isMobi
   }
 
   return (
-    <div className="w-full">
+    <div className="w-full animate-in slide-in-from-top-2 duration-200">
       <div className="relative">
         <textarea
           ref={textareaRef}
@@ -70,8 +70,8 @@ export default function MessageEditor({ initialContent, onSave, onCancel, isMobi
           onChange={(e) => setContent(e.target.value)}
           onKeyDown={handleKeyDown}
           disabled={saving}
-          className={`w-full px-3 py-2 bg-gray-600 border border-gray-500 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 disabled:bg-gray-700 disabled:cursor-not-allowed resize-none ${
-            isMobile ? 'text-sm' : 'text-base'
+          className={`w-full px-3 py-2 bg-gray-600 border border-gray-500 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 disabled:bg-gray-700 disabled:cursor-not-allowed resize-none transition-all duration-200 ${
+            isMobile ? 'text-sm mobile-input mobile-input-focus' : 'text-base'
           }`}
           placeholder="Edit your message..."
           maxLength={2000}
@@ -80,7 +80,7 @@ export default function MessageEditor({ initialContent, onSave, onCancel, isMobi
       </div>
       
       <div className="flex items-center justify-between mt-2">
-        <div className={`text-gray-500 ${isMobile ? 'text-xs' : 'text-xs'}`}>
+        <div className={`text-gray-500 transition-opacity duration-200 ${isMobile ? 'text-xs' : 'text-xs'} ${content.length > 0 ? 'opacity-100' : 'opacity-0'}`}>
           {content.length}/2000 • Press Enter to save, Esc to cancel
         </div>
         
@@ -88,8 +88,8 @@ export default function MessageEditor({ initialContent, onSave, onCancel, isMobi
           <button
             onClick={onCancel}
             disabled={saving}
-            className={`px-3 py-1 bg-gray-600 hover:bg-gray-700 disabled:bg-gray-700 disabled:cursor-not-allowed text-white rounded transition-colors ${
-              isMobile ? 'text-xs' : 'text-sm'
+            className={`px-3 py-1 bg-gray-600 hover:bg-gray-700 disabled:bg-gray-700 disabled:cursor-not-allowed text-white rounded transition-all duration-200 transform hover:scale-105 active:scale-95 ${
+              isMobile ? 'text-xs mobile-button mobile-touch-feedback' : 'text-sm'
             }`}
           >
             Cancel
@@ -97,8 +97,8 @@ export default function MessageEditor({ initialContent, onSave, onCancel, isMobi
           <button
             onClick={handleSave}
             disabled={saving || content.trim() === ''}
-            className={`px-3 py-1 bg-blue-600 hover:bg-blue-700 disabled:bg-gray-600 disabled:cursor-not-allowed text-white rounded transition-colors flex items-center space-x-1 ${
-              isMobile ? 'text-xs' : 'text-sm'
+            className={`px-3 py-1 bg-blue-600 hover:bg-blue-700 disabled:bg-gray-600 disabled:cursor-not-allowed text-white rounded transition-all duration-200 flex items-center space-x-1 transform hover:scale-105 active:scale-95 ${
+              isMobile ? 'text-xs mobile-button mobile-touch-feedback' : 'text-sm'
             }`}
           >
             {saving ? (

@@ -30,8 +30,11 @@ export default function MessageItem({
   const [isEditing, setIsEditing] = useState(false)
   const [isDeleting, setIsDeleting] = useState(false)
   const [userRoleColor, setUserRoleColor] = useState('#ffffff')
+  const [showActions, setShowActions] = useState(false)
 
   const isOwnMessage = message.authorId === currentUserId
+  const isOptimistic = message.id.startsWith('temp-')
+  
   const isGifUrl = (url: string): boolean => {
     return url.includes('tenor.com') || url.includes('.gif') || url.match(/\.(gif|webp)(\?|$)/i) !== null
   }
@@ -101,7 +104,7 @@ export default function MessageItem({
 
   if (isDeleting) {
     return (
-      <div className={`flex space-x-2 md:space-x-3 px-1 md:px-2 py-2 md:py-1.5 rounded opacity-50`}>
+      <div className={`flex space-x-2 md:space-x-3 px-1 md:px-2 py-2 md:py-1.5 rounded opacity-50 transition-all duration-300 animate-pulse`}>
         <div className={`${isMobile ? 'w-8 h-8' : 'w-10 h-10'} bg-gray-600 rounded-full flex items-center justify-center flex-shrink-0`}>
           <div className="w-4 h-4 border-2 border-gray-400 border-t-transparent rounded-full animate-spin"></div>
         </div>
@@ -113,12 +116,18 @@ export default function MessageItem({
   }
 
   return (
-    <div className={`flex space-x-2 md:space-x-3 hover:bg-gray-800/30 px-1 md:px-2 py-2 md:py-1.5 rounded group`}>
-      <div 
-        onClick={() => onUserClick && onUserClick(message.authorId)}
-        className={`${isMobile ? 'w-8 h-8' : 'w-10 h-10'} bg-slate-600 rounded-full flex items-center justify-center flex-shrink-0 overflow-hidden cursor-pointer hover:ring-2 transition-all`}
-        style={{ '--tw-ring-color': userRoleColor } as React.CSSProperties}
-      >
+    <div 
+      className={`flex space-x-2 md:space-x-3 hover:bg-gray-800/30 px-1 md:px-2 py-2 md:py-1.5 rounded group transition-all duration-200 ${
+        isOptimistic ? 'opacity-70 mobile-message-optimistic' : 'mobile-message-enter'
+      } ${isOwnMessage ? 'hover:bg-blue-900/20' : ''} ${isMobile ? 'mobile-performance' : ''}`}
+      onMouseEnter={() => setShowActions(true)}
+      onMouseLeave={() => setShowActions(false)}
+    >
+              <div 
+          onClick={() => onUserClick && onUserClick(message.authorId)}
+          className={`${isMobile ? 'w-8 h-8' : 'w-10 h-10'} bg-slate-600 rounded-full flex items-center justify-center flex-shrink-0 overflow-hidden cursor-pointer hover:ring-2 transition-all duration-200 transform hover:scale-105 ${isMobile ? 'mobile-touch-target mobile-touch-feedback' : ''}`}
+          style={{ '--tw-ring-color': userRoleColor } as React.CSSProperties}
+        >
         {message.authorAvatarUrl ? (
           <img
             src={message.authorAvatarUrl}
@@ -136,12 +145,12 @@ export default function MessageItem({
         <div className="flex items-baseline space-x-2">
           <span 
             onClick={() => onUserClick && onUserClick(message.authorId)}
-            className={`font-medium cursor-pointer hover:underline ${isMobile ? 'text-sm' : 'text-base'}`}
+            className={`font-medium cursor-pointer hover:underline transition-colors duration-200 ${isMobile ? 'text-sm' : 'text-base'}`}
             style={{ color: userRoleColor }}
           >
             {message.authorName}
           </span>
-          <span className={`text-gray-400 group-hover:text-gray-300 ${isMobile ? 'text-xs' : 'text-xs'}`}>
+          <span className={`text-gray-400 group-hover:text-gray-300 transition-colors duration-200 ${isMobile ? 'text-xs' : 'text-xs'}`}>
             {formatTime(message.timestamp)}
             {message.edited && (
               <span className="ml-1 text-xs text-gray-500">(edited)</span>
@@ -149,7 +158,7 @@ export default function MessageItem({
           </span>
           
           {!isEditing && (isOwnMessage || canManageMessages) && (
-            <div className="ml-auto">
+            <div className={`ml-auto transition-all duration-200 ${showActions || isMobile ? 'opacity-100' : 'opacity-0'}`}>
               <MessageActions
                 isOwnMessage={isOwnMessage}
                 canManageMessages={canManageMessages}
@@ -163,23 +172,27 @@ export default function MessageItem({
 
         <div className={`mt-0.5 ${isMobile ? 'text-sm' : 'text-base'}`}>
           {isEditing ? (
-            <MessageEditor
-              initialContent={message.content}
-              onSave={handleEdit}
-              onCancel={() => setIsEditing(false)}
-              isMobile={isMobile}
-            />
+            <div className="transition-all duration-200">
+              <MessageEditor
+                initialContent={message.content}
+                onSave={handleEdit}
+                onCancel={() => setIsEditing(false)}
+                isMobile={isMobile}
+              />
+            </div>
           ) : (
-            <div className="text-gray-200 break-words leading-relaxed">
+            <div className="text-gray-200 break-words leading-relaxed transition-all duration-200">
               {isGifUrl(message.content) ? (
-                <img
-                  src={message.content}
-                  alt="GIF"
-                  className={`${isMobile ? 'max-w-48 max-h-32' : 'max-w-xs max-h-48'} rounded-lg`}
-                  loading="lazy"
-                />
+                <div className="transition-all duration-200 transform hover:scale-105">
+                  <img
+                    src={message.content}
+                    alt="GIF"
+                    className={`${isMobile ? 'max-w-48 max-h-32' : 'max-w-xs max-h-48'} rounded-lg shadow-lg`}
+                    loading="lazy"
+                  />
+                </div>
               ) : (
-                message.content
+                <span className="select-text">{message.content}</span>
               )}
             </div>
           )}

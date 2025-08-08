@@ -91,6 +91,9 @@ export default function ChannelSidebar({
     const channel = channels.find(ch => ch.id === channelId)
     if (!channel) return false
     
+    // No mostrar indicador si es el canal activo
+    if (activeChannelId === channelId) return false
+    
     return notificationService.hasUnreadInChannel(serverId, channelId)
   }
 
@@ -231,7 +234,7 @@ export default function ChannelSidebar({
                   <div
                     key={channel.id}
                     onClick={() => onChannelSelect(channel.id)}
-                    className={`flex items-center px-2 py-2 md:py-1.5 rounded cursor-pointer transition-all duration-300 group ${
+                    className={`flex items-center px-3 py-3 md:py-1.5 rounded cursor-pointer transition-all duration-300 group mobile-touch-target ${
                       activeChannelId === channel.id
                         ? 'bg-gray-700 text-white'
                         : hasUnreadMessages(channel.id)
@@ -246,7 +249,7 @@ export default function ChannelSidebar({
                     }`}>
                       {channel.type === 'text' ? '#' : '🔊'}
                     </span>
-                    <span className={`text-sm truncate flex-1 ${
+                    <span className={`${isMobile ? 'text-base' : 'text-sm'} truncate flex-1 ${
                       hasUnreadMessages(channel.id) && activeChannelId !== channel.id 
                         ? 'font-semibold text-white' 
                         : ''
@@ -282,7 +285,7 @@ export default function ChannelSidebar({
                 <div
                   key={channel.id}
                   onClick={() => onChannelSelect(channel.id)}
-                  className={`flex items-center px-2 py-2 md:py-1.5 rounded cursor-pointer transition-all duration-300 group ${
+                  className={`flex items-center px-3 py-3 md:py-1.5 rounded cursor-pointer transition-all duration-300 group mobile-touch-target ${
                     activeChannelId === channel.id
                       ? 'bg-gray-700 text-white'
                       : hasUnreadMessages(channel.id)
@@ -297,7 +300,7 @@ export default function ChannelSidebar({
                   }`}>
                     {channel.type === 'text' ? '#' : '🔊'}
                   </span>
-                  <span className={`text-sm truncate flex-1 ${
+                  <span className={`${isMobile ? 'text-base' : 'text-sm'} truncate flex-1 ${
                     hasUnreadMessages(channel.id) && activeChannelId !== channel.id 
                       ? 'font-semibold text-white' 
                       : ''

@@ -45,22 +45,27 @@ export default function ChatArea({
 }: ChatAreaProps) {
   const [message, setMessage] = useState('')
   const [sending, setSending] = useState(false)
+  const [optimisticMessages, setOptimisticMessages] = useState<Message[]>([])
   const [, setIsScrolledUp] = useState(false)
   const [showGifSelector, setShowGifSelector] = useState(false)
   const [unreadCount, setUnreadCount] = useState(0)
   const [, setLastReadMessageId] = useState<string | null>(null)
   const [hasScrolledToLastPosition, setHasScrolledToLastPosition] = useState(false)
+  const [inputFocused, setInputFocused] = useState(false)
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const messagesContainerRef = useRef<HTMLDivElement>(null)
   const messageInputRef = useRef<HTMLInputElement>(null)
   const previousMessagesLengthRef = useRef(messages.length)
+
+  // Combinar mensajes reales con optimistas
+  const allMessages = [...messages, ...optimisticMessages]
 
   useEffect(() => {
     const channelKey = `scroll-${serverId}-${channelId}`
     const savedScrollPosition = localStorage.getItem(channelKey)
     const container = messagesContainerRef.current
     
-    if (container && messages.length > 0 && !hasScrolledToLastPosition) {
+    if (container && allMessages.length > 0 && !hasScrolledToLastPosition) {
       if (savedScrollPosition) {
         const scrollTop = parseInt(savedScrollPosition)
         container.scrollTop = scrollTop
@@ -70,13 +75,14 @@ export default function ChatArea({
       }
       setHasScrolledToLastPosition(true)
     }
-  }, [messages, channelId, serverId, hasScrolledToLastPosition])
+  }, [allMessages, channelId, serverId, hasScrolledToLastPosition])
 
   useEffect(() => {
     if (channelId) {
       setHasScrolledToLastPosition(false)
       setUnreadCount(0)
       setLastReadMessageId(null)
+      setOptimisticMessages([])
       previousMessagesLengthRef.current = messages.length
       
       const lastReadKey = `last-read-${serverId}-${channelId}`
@@ -89,14 +95,14 @@ export default function ChatArea({
 
   useEffect(() => {
     const container = messagesContainerRef.current
-    if (!container || messages.length === 0) return
+    if (!container || allMessages.length === 0) return
 
     const lastReadKey = `last-read-${serverId}-${channelId}`
     const savedLastRead = localStorage.getItem(lastReadKey)
     
-    if (savedLastRead && messages.length > 0) {
-      const lastReadIndex = messages.findIndex(msg => msg.id === savedLastRead)
-      const unreadMessages = lastReadIndex >= 0 ? messages.slice(lastReadIndex + 1) : messages
+    if (savedLastRead && allMessages.length > 0) {
+      const lastReadIndex = allMessages.findIndex(msg => msg.id === savedLastRead)
+      const unreadMessages = lastReadIndex >= 0 ? allMessages.slice(lastReadIndex + 1) : allMessages
       const actualUnreadCount = unreadMessages.filter(msg => msg.authorId !== currentUserId).length
       
       if (actualUnreadCount > 0) {
@@ -107,8 +113,8 @@ export default function ChatArea({
       }
     }
     
-    previousMessagesLengthRef.current = messages.length
-  }, [messages, channelId, serverId, currentUserId])
+    previousMessagesLengthRef.current = allMessages.length
+  }, [allMessages, channelId, serverId, currentUserId])
 
   useEffect(() => {
     if (isMobile && onHideMobileNav) {
@@ -116,13 +122,11 @@ export default function ChatArea({
     }
   }, [isMobile, onHideMobileNav])
 
-
   useEffect(() => {
     if (canSendMessages && messageInputRef.current) {
       messageInputRef.current.focus()
     }
   }, [canSendMessages])
-
 
   useEffect(() => {
     if (!sending && canSendMessages && messageInputRef.current) {
@@ -138,8 +142,8 @@ export default function ChatArea({
     if (isAtBottom) {
       setUnreadCount(0)
       
-      if (messages.length > 0 && serverId && channelId) {
-        const lastMessage = messages[messages.length - 1]
+      if (allMessages.length > 0 && serverId && channelId) {
+        const lastMessage = allMessages[allMessages.length - 1]
         const lastReadKey = `last-read-${serverId}-${channelId}`
         localStorage.setItem(lastReadKey, lastMessage.id)
         setLastReadMessageId(lastMessage.id)
@@ -152,10 +156,16 @@ export default function ChatArea({
     const channelKey = `scroll-${serverId}-${channelId}`
     localStorage.setItem(channelKey, container.scrollTop.toString())
     
-    if (isMobile && onShowMobileNav && !isAtBottom) {
-      onShowMobileNav()
-    } else if (isMobile && onHideMobileNav && isAtBottom) {
-      onHideMobileNav()
+    // Solo mostrar/ocultar navegación mobile si hay scroll significativo
+    if (isMobile) {
+      const scrollThreshold = 100
+      const hasScrolledSignificantly = container.scrollTop > scrollThreshold
+      
+      if (onShowMobileNav && hasScrolledSignificantly && !isAtBottom) {
+        onShowMobileNav()
+      } else if (onHideMobileNav && (isAtBottom || !hasScrolledSignificantly)) {
+        onHideMobileNav()
+      }
     }
   }
 
@@ -163,8 +173,8 @@ export default function ChatArea({
     setUnreadCount(0)
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
     
-    if (messages.length > 0 && serverId && channelId) {
-      const lastMessage = messages[messages.length - 1]
+    if (allMessages.length > 0 && serverId && channelId) {
+      const lastMessage = allMessages[allMessages.length - 1]
       const lastReadKey = `last-read-${serverId}-${channelId}`
       localStorage.setItem(lastReadKey, lastMessage.id)
       setLastReadMessageId(lastMessage.id)
@@ -174,24 +184,57 @@ export default function ChatArea({
     }
   }
 
+  const createOptimisticMessage = (content: string): Message => {
+    const tempId = `temp-${Date.now()}-${Math.random()}`
+    return {
+      id: tempId,
+      content: content.trim(),
+      authorId: currentUserId,
+      authorName: 'You',
+      serverId: serverId || '',
+      channelId: channelId || '',
+      timestamp: new Date(),
+      edited: false
+    }
+  }
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     if (message.trim() && !sending && canSendMessages) {
+      const messageContent = message.trim()
+      setMessage('')
+      
+      // Crear mensaje optimista
+      const optimisticMessage = createOptimisticMessage(messageContent)
+      setOptimisticMessages(prev => [...prev, optimisticMessage])
+      
+      // Scroll inmediato para mostrar el mensaje optimista
+      setTimeout(() => {
+        scrollToBottom()
+      }, 10)
+      
       setSending(true)
       try {
-        await onSendMessage(message.trim())
-        setMessage('')
+        await onSendMessage(messageContent)
         
+        // Remover mensaje optimista después de enviar exitosamente
         setTimeout(() => {
-          scrollToBottom()
+          setOptimisticMessages(prev => prev.filter(msg => msg.id !== optimisticMessage.id))
+        }, 500)
+        
+      } catch (error) {
+        console.error('Failed to send message:', error)
+        // Remover mensaje optimista en caso de error
+        setOptimisticMessages(prev => prev.filter(msg => msg.id !== optimisticMessage.id))
+        // Restaurar el mensaje en el input
+        setMessage(messageContent)
+      } finally {
+        setSending(false)
+        setTimeout(() => {
           if (messageInputRef.current) {
             messageInputRef.current.focus()
           }
         }, 100)
-      } catch (error) {
-        console.error('Failed to send message:', error)
-      } finally {
-        setSending(false)
       }
     }
   }
@@ -205,20 +248,37 @@ export default function ChatArea({
 
   const handleGifSelect = async (gifUrl: string) => {
     if (!sending && canSendMessages) {
+      // Crear mensaje optimista para GIF
+      const optimisticMessage = createOptimisticMessage(gifUrl)
+      setOptimisticMessages(prev => [...prev, optimisticMessage])
+      
+      setShowGifSelector(false)
       setSending(true)
+      
+      // Scroll inmediato
+      setTimeout(() => {
+        scrollToBottom()
+      }, 10)
+      
       try {
         await onSendMessage(gifUrl)
-        setShowGifSelector(false)
-        // Mantener focus después de enviar GIF
+        
+        // Remover mensaje optimista después de enviar exitosamente
+        setTimeout(() => {
+          setOptimisticMessages(prev => prev.filter(msg => msg.id !== optimisticMessage.id))
+        }, 500)
+        
+      } catch (error) {
+        console.error('Failed to send GIF:', error)
+        // Remover mensaje optimista en caso de error
+        setOptimisticMessages(prev => prev.filter(msg => msg.id !== optimisticMessage.id))
+      } finally {
+        setSending(false)
         setTimeout(() => {
           if (messageInputRef.current) {
             messageInputRef.current.focus()
           }
-        }, 0)
-      } catch (error) {
-        console.error('Failed to send GIF:', error)
-      } finally {
-        setSending(false)
+        }, 100)
       }
     }
   }
@@ -283,18 +343,21 @@ export default function ChatArea({
   }
 
   const handleInputFocus = () => {
-    // Asegurar que el GIF selector se cierre cuando se enfoca el input
+    setInputFocused(true)
     setShowGifSelector(false)
   }
 
+  const handleInputBlur = () => {
+    setInputFocused(false)
+  }
+
   const handleInputClick = () => {
-    // Cerrar GIF selector al hacer click en el input
     setShowGifSelector(false)
   }
 
   return (
     <div className="flex-1 flex flex-col bg-gray-700 h-full relative">
-      <div className={`${isMobile ? 'h-14 fixed top-0 left-0 right-0 z-50' : 'h-12'} border-b border-gray-600 flex items-center justify-between px-4 bg-gray-700`}>
+      <div className={`${isMobile ? 'h-16 fixed top-0 left-0 right-0 z-50' : 'h-12'} border-b border-gray-600 flex items-center justify-between px-4 bg-gray-700`}>
         {unreadCount > 0 && (
           <div className={`absolute ${isMobile ? 'top-14' : 'top-12'} left-1/2 transform -translate-x-1/2 z-40`}>
             <button
@@ -315,9 +378,9 @@ export default function ChatArea({
                 onBackToChannels()
                 if (onShowMobileNav) onShowMobileNav()
               }}
-              className="mr-3 p-1 text-gray-400 hover:text-white transition-colors"
+              className="mr-3 p-2 text-gray-400 hover:text-white transition-colors mobile-touch-target"
             >
-              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
               </svg>
             </button>
@@ -325,19 +388,19 @@ export default function ChatArea({
           <div className="flex flex-col">
             <div className="flex items-center">
               <span className="text-gray-400 mr-2">#</span>
-              <h3 className={`text-white font-semibold ${isMobile ? 'text-base' : 'text-sm'}`}>{channelName}</h3>
+              <h3 className={`text-white font-semibold ${isMobile ? 'text-lg' : 'text-sm'}`}>{channelName}</h3>
             </div>
             {isMobile && (
-              <span className="text-xs text-gray-400">{serverName}</span>
+              <span className="text-sm text-gray-400">{serverName}</span>
             )}
           </div>
         </div>
         
         <button
           onClick={onToggleMemberList}
-          className="p-2 text-gray-400 hover:text-white transition-colors"
+          className="p-2 text-gray-400 hover:text-white transition-colors mobile-touch-target"
         >
-          <svg className={`${isMobile ? 'w-5 h-5' : 'w-4 h-4'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <svg className={`${isMobile ? 'w-6 h-6' : 'w-4 h-4'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197m13.5-9a2.5 2.5 0 11-5 0 2.5 2.5 0 015 0z" />
           </svg>
         </button>
@@ -346,9 +409,9 @@ export default function ChatArea({
       <div 
         ref={messagesContainerRef}
         onScroll={handleScroll}
-        className={`flex-1 overflow-y-auto px-2 md:px-4 py-2 md:py-4 ${isMobile ? 'pb-20 pt-16' : ''}`}
+        className={`flex-1 overflow-y-auto px-2 md:px-4 py-2 md:py-4 ${isMobile ? 'pb-24 pt-20 mobile-smooth-scroll mobile-gesture' : ''}`}
       >
-        {messages.length === 0 ? (
+        {allMessages.length === 0 ? (
           <div className="flex items-center justify-center h-full">
             <div className="text-center px-4">
               <div className={`${isMobile ? 'w-12 h-12' : 'w-16 h-16'} bg-gray-600 rounded-full flex items-center justify-center mx-auto mb-4`}>
@@ -365,12 +428,13 @@ export default function ChatArea({
           </div>
         ) : (
           <div className="space-y-1">
-            {messages.map((msg, index) => {
-              const previousMessage = index > 0 ? messages[index - 1] : undefined
+            {allMessages.map((msg, index) => {
+              const previousMessage = index > 0 ? allMessages[index - 1] : undefined
               const showDateSeparator = shouldShowDateSeparator(msg, previousMessage)
+              const isOptimistic = msg.id.startsWith('temp-')
               
               return (
-                <div key={msg.id}>
+                <div key={msg.id} className={`transition-all duration-200 ${isOptimistic ? 'opacity-70' : ''}`}>
                   {showDateSeparator && (
                     <div className="flex items-center my-4 md:my-6">
                       <div className="flex-1 h-px bg-gray-600"></div>
@@ -399,7 +463,7 @@ export default function ChatArea({
         <div ref={messagesEndRef} />
       </div>
 
-      <div className={`${isMobile ? 'fixed bottom-0 left-0 right-0 bg-gray-700 border-t border-gray-600 z-20' : ''} p-2 md:p-4 ${isMobile ? 'pb-4' : ''} relative`}>
+      <div className={`${isMobile ? 'fixed bottom-0 left-0 right-0 bg-gray-700 border-t border-gray-600 z-20' : ''} p-3 md:p-4 ${isMobile ? 'pb-6' : ''} relative`}>
         {!canSendMessages && sendMessageError && (
           <div className="mb-2 p-2 bg-red-900/30 border border-red-700/50 rounded-lg">
             <p className="text-red-300 text-sm">{sendMessageError}</p>
@@ -415,18 +479,19 @@ export default function ChatArea({
               onChange={(e) => setMessage(e.target.value)}
               onKeyDown={handleKeyDown}
               onFocus={handleInputFocus}
+              onBlur={handleInputBlur}
               onClick={handleInputClick}
               placeholder={getMessageInputPlaceholder()}
               disabled={sending || !canSendMessages}
-              className={`w-full px-3 md:px-4 py-2 md:py-3 pr-16 md:pr-20 bg-gray-600 border-none rounded-lg text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-slate-500 disabled:bg-gray-700 disabled:cursor-not-allowed ${isMobile ? 'text-sm' : 'text-base'} ${
+              className={`w-full px-4 md:px-4 py-3 md:py-3 pr-16 md:pr-20 bg-gray-600 border-none rounded-lg text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-slate-500 disabled:bg-gray-700 disabled:cursor-not-allowed ${isMobile ? 'text-base mobile-input mobile-input-focus' : 'text-base'} ${
                 !canSendMessages ? 'opacity-60' : ''
-              }`}
+              } transition-all duration-200 ${inputFocused ? 'ring-2 ring-slate-500' : ''}`}
               maxLength={2000}
               autoComplete="off"
               autoCorrect="off"
               spellCheck="false"
             />
-            <div className="absolute right-2 top-1/2 transform -translate-y-1/2 flex items-center space-x-1">
+            <div className="absolute right-3 top-1/2 transform -translate-y-1/2 flex items-center space-x-2">
               {canSendMessages && (
                 <button
                   type="button"
@@ -435,11 +500,11 @@ export default function ChatArea({
                     setShowGifSelector(!showGifSelector)
                   }}
                   disabled={sending || !canSendMessages}
-                  className={`p-1 md:p-2 text-gray-400 hover:text-white disabled:text-gray-500 transition-colors ${
+                  className={`p-2 md:p-2 text-gray-400 hover:text-white disabled:text-gray-500 transition-all duration-200 mobile-touch-target ${
                     showGifSelector ? 'text-white' : ''
                   }`}
                 >
-                  <svg className={`${isMobile ? 'w-4 h-4' : 'w-5 h-5'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <svg className={`${isMobile ? 'w-5 h-5' : 'w-5 h-5'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 4V2a1 1 0 011-1h8a1 1 0 011 1v2m0 0V1a1 1 0 011-1h2a1 1 0 011 1v18a1 1 0 01-1 1H4a1 1 0 01-1-1V1a1 1 0 011-1h2a1 1 0 011 1v3m0 0h8m-8 0H5a1 1 0 00-1 1v3m0 0h16" />
                   </svg>
                 </button>
@@ -447,12 +512,12 @@ export default function ChatArea({
               <button
                 type="submit"
                 disabled={!message.trim() || sending || !canSendMessages}
-                className={`p-1 md:p-2 text-gray-400 hover:text-white disabled:text-gray-500 transition-colors`}
+                className={`p-2 md:p-2 text-gray-400 hover:text-white disabled:text-gray-500 transition-all duration-200 transform hover:scale-105 active:scale-95 ${isMobile ? 'mobile-button mobile-touch-feedback' : ''}`}
               >
                 {sending ? (
-                  <div className={`${isMobile ? 'w-3 h-3' : 'w-4 h-4'} border-2 border-gray-400 border-t-transparent rounded-full animate-spin`}></div>
+                  <div className={`${isMobile ? 'w-4 h-4' : 'w-4 h-4'} border-2 border-gray-400 border-t-transparent rounded-full animate-spin`}></div>
                 ) : (
-                  <svg className={`${isMobile ? 'w-4 h-4' : 'w-5 h-5'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <svg className={`${isMobile ? 'w-5 h-5' : 'w-5 h-5'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" />
                   </svg>
                 )}
@@ -461,7 +526,7 @@ export default function ChatArea({
           </div>
           
           {canSendMessages && (
-            <div className={`text-gray-500 mt-1 ${isMobile ? 'text-xs' : 'text-xs'}`}>
+            <div className={`text-gray-500 mt-1 ${isMobile ? 'text-xs' : 'text-xs'} transition-opacity duration-200 ${message.length > 0 ? 'opacity-100' : 'opacity-0'}`}>
               {message.length}/2000
             </div>
           )}

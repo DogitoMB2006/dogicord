@@ -391,20 +391,20 @@ export default function Home() {
     if (!isMobile || !showMobileNav) return null
 
     return (
-      <div className="md:hidden fixed bottom-0 left-0 right-0 bg-gray-900 border-t border-gray-700 flex z-40 transition-transform duration-300">
+      <div className="md:hidden fixed bottom-0 left-0 right-0 bg-gray-900 border-t border-gray-700 flex z-40 transition-transform duration-300 mobile-nav-bar">
         <button
           onClick={() => {
             setMobileView('servers')
             setShowMobileNav(true)
           }}
-          className={`flex-1 py-3 px-2 flex flex-col items-center ${
+          className={`flex-1 flex flex-col items-center mobile-nav-button mobile-touch-feedback ${
             mobileView === 'servers' ? 'text-white bg-gray-800' : 'text-gray-400'
           }`}
         >
-          <svg className="w-5 h-5 mb-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <svg className="mobile-nav-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 11H5m14-2H5" />
           </svg>
-          <span className="text-xs">Servers</span>
+          <span className="mobile-nav-text">Servers</span>
         </button>
         
         <button
@@ -412,14 +412,14 @@ export default function Home() {
             setMobileView('channels')
             setShowMobileNav(true)
           }}
-          className={`flex-1 py-3 px-2 flex flex-col items-center ${
+          className={`flex-1 flex flex-col items-center mobile-nav-button mobile-touch-feedback ${
             mobileView === 'channels' ? 'text-white bg-gray-800' : 'text-gray-400'
           }`}
         >
-          <svg className="w-5 h-5 mb-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <svg className="mobile-nav-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 8h10M7 12h4m1 8l-4-4H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-3l-4 4z" />
           </svg>
-          <span className="text-xs">Channels</span>
+          <span className="mobile-nav-text">Channels</span>
         </button>
         
         <button
@@ -427,14 +427,14 @@ export default function Home() {
             setMobileView('chat')
             setShowMobileNav(false)
           }}
-          className={`flex-1 py-3 px-2 flex flex-col items-center ${
+          className={`flex-1 flex flex-col items-center mobile-nav-button mobile-touch-feedback ${
             mobileView === 'chat' ? 'text-white bg-gray-800' : 'text-gray-400'
           }`}
         >
-          <svg className="w-5 h-5 mb-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <svg className="mobile-nav-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
           </svg>
-          <span className="text-xs">Chat</span>
+          <span className="mobile-nav-text">Chat</span>
         </button>
       </div>
     )
