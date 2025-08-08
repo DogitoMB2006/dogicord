@@ -2,6 +2,7 @@
 import { useState, useRef, useEffect } from 'react'
 import type { Message } from '../../services/messageService'
 import { messageService } from '../../services/messageService'
+import { notificationService } from '../../services/notificationService'
 import GifSelector from './GifSelector'
 import MessageItem from '../chat/MessageItem'
 
@@ -13,6 +14,7 @@ interface ChatAreaProps {
   onBackToChannels?: () => void
   serverName: string
   serverId?: string
+  channelId?: string
   onShowMobileNav?: () => void
   onHideMobileNav?: () => void
   onToggleMemberList?: () => void
@@ -31,6 +33,7 @@ export default function ChatArea({
   onBackToChannels,
   serverName,
   serverId,
+  channelId,
   onShowMobileNav,
   onHideMobileNav,
   onToggleMemberList,
@@ -42,17 +45,70 @@ export default function ChatArea({
 }: ChatAreaProps) {
   const [message, setMessage] = useState('')
   const [sending, setSending] = useState(false)
-  const [isScrolledUp, setIsScrolledUp] = useState(false)
+  const [, setIsScrolledUp] = useState(false)
   const [showGifSelector, setShowGifSelector] = useState(false)
+  const [unreadCount, setUnreadCount] = useState(0)
+  const [, setLastReadMessageId] = useState<string | null>(null)
+  const [hasScrolledToLastPosition, setHasScrolledToLastPosition] = useState(false)
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const messagesContainerRef = useRef<HTMLDivElement>(null)
   const messageInputRef = useRef<HTMLInputElement>(null)
+  const previousMessagesLengthRef = useRef(messages.length)
 
   useEffect(() => {
-    if (!isScrolledUp) {
-      messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
+    const channelKey = `scroll-${serverId}-${channelId}`
+    const savedScrollPosition = localStorage.getItem(channelKey)
+    const container = messagesContainerRef.current
+    
+    if (container && messages.length > 0 && !hasScrolledToLastPosition) {
+      if (savedScrollPosition) {
+        const scrollTop = parseInt(savedScrollPosition)
+        container.scrollTop = scrollTop
+        setIsScrolledUp(scrollTop < container.scrollHeight - container.clientHeight - 50)
+      } else {
+        messagesEndRef.current?.scrollIntoView({ behavior: 'instant' })
+      }
+      setHasScrolledToLastPosition(true)
     }
-  }, [messages, isScrolledUp])
+  }, [messages, channelId, serverId, hasScrolledToLastPosition])
+
+  useEffect(() => {
+    if (channelId) {
+      setHasScrolledToLastPosition(false)
+      setUnreadCount(0)
+      setLastReadMessageId(null)
+      previousMessagesLengthRef.current = messages.length
+      
+      const lastReadKey = `last-read-${serverId}-${channelId}`
+      const savedLastRead = localStorage.getItem(lastReadKey)
+      if (savedLastRead && messages.length > 0) {
+        setLastReadMessageId(savedLastRead)
+      }
+    }
+  }, [channelId, serverId])
+
+  useEffect(() => {
+    const container = messagesContainerRef.current
+    if (!container || messages.length === 0) return
+
+    const lastReadKey = `last-read-${serverId}-${channelId}`
+    const savedLastRead = localStorage.getItem(lastReadKey)
+    
+    if (savedLastRead && messages.length > 0) {
+      const lastReadIndex = messages.findIndex(msg => msg.id === savedLastRead)
+      const unreadMessages = lastReadIndex >= 0 ? messages.slice(lastReadIndex + 1) : messages
+      const actualUnreadCount = unreadMessages.filter(msg => msg.authorId !== currentUserId).length
+      
+      if (actualUnreadCount > 0) {
+        const isAtBottom = container.scrollHeight - container.scrollTop <= container.clientHeight + 50
+        if (!isAtBottom) {
+          setUnreadCount(actualUnreadCount)
+        }
+      }
+    }
+    
+    previousMessagesLengthRef.current = messages.length
+  }, [messages, channelId, serverId, currentUserId])
 
   useEffect(() => {
     if (isMobile && onHideMobileNav) {
@@ -79,10 +135,42 @@ export default function ChatArea({
     const isAtBottom = container.scrollHeight - container.scrollTop <= container.clientHeight + 50
     setIsScrolledUp(!isAtBottom)
     
+    if (isAtBottom) {
+      setUnreadCount(0)
+      
+      if (messages.length > 0 && serverId && channelId) {
+        const lastMessage = messages[messages.length - 1]
+        const lastReadKey = `last-read-${serverId}-${channelId}`
+        localStorage.setItem(lastReadKey, lastMessage.id)
+        setLastReadMessageId(lastMessage.id)
+        
+        // Marcar canal como leído
+        notificationService.markChannelAsRead(serverId, channelId)
+      }
+    }
+    
+    const channelKey = `scroll-${serverId}-${channelId}`
+    localStorage.setItem(channelKey, container.scrollTop.toString())
+    
     if (isMobile && onShowMobileNav && !isAtBottom) {
       onShowMobileNav()
     } else if (isMobile && onHideMobileNav && isAtBottom) {
       onHideMobileNav()
+    }
+  }
+
+  const scrollToBottom = () => {
+    setUnreadCount(0)
+    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
+    
+    if (messages.length > 0 && serverId && channelId) {
+      const lastMessage = messages[messages.length - 1]
+      const lastReadKey = `last-read-${serverId}-${channelId}`
+      localStorage.setItem(lastReadKey, lastMessage.id)
+      setLastReadMessageId(lastMessage.id)
+      
+      // Marcar canal como leído
+      notificationService.markChannelAsRead(serverId, channelId)
     }
   }
 
@@ -93,12 +181,13 @@ export default function ChatArea({
       try {
         await onSendMessage(message.trim())
         setMessage('')
-  
+        
         setTimeout(() => {
+          scrollToBottom()
           if (messageInputRef.current) {
             messageInputRef.current.focus()
           }
-        }, 0)
+        }, 100)
       } catch (error) {
         console.error('Failed to send message:', error)
       } finally {
@@ -206,6 +295,19 @@ export default function ChatArea({
   return (
     <div className="flex-1 flex flex-col bg-gray-700 h-full relative">
       <div className={`${isMobile ? 'h-14 fixed top-0 left-0 right-0 z-50' : 'h-12'} border-b border-gray-600 flex items-center justify-between px-4 bg-gray-700`}>
+        {unreadCount > 0 && (
+          <div className={`absolute ${isMobile ? 'top-14' : 'top-12'} left-1/2 transform -translate-x-1/2 z-40`}>
+            <button
+              onClick={scrollToBottom}
+              className={`bg-blue-600 hover:bg-blue-700 text-white px-3 py-2 rounded-full shadow-lg transition-all duration-200 flex items-center space-x-2 ${isMobile ? 'text-sm' : 'text-xs'}`}
+            >
+              <span>Han mandado {unreadCount} mensaje{unreadCount > 1 ? 's' : ''} nuevo{unreadCount > 1 ? 's' : ''}</span>
+              <svg className={`${isMobile ? 'w-4 h-4' : 'w-3 h-3'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 14l-7 7m0 0l-7-7m7 7V3" />
+              </svg>
+            </button>
+          </div>
+        )}
         <div className="flex items-center">
           {isMobile && onBackToChannels && (
             <button

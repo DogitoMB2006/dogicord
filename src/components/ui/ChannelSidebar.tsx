@@ -2,11 +2,14 @@
 import { useState, useEffect } from 'react'
 import { useAuth } from '../../contexts/AuthContext'
 import { serverService } from '../../services/serverService'
+import { notificationService } from '../../services/notificationService'
 import type { Channel, Category } from '../../types/channels'
 import type { Role } from '../../types/permissions'
+import '../../styles/glow.css'
 
 interface ChannelSidebarProps {
   serverName: string
+  serverId: string
   channels: Channel[]
   categories: Category[]
   activeChannelId?: string
@@ -21,6 +24,7 @@ interface ChannelSidebarProps {
 
 export default function ChannelSidebar({ 
   serverName, 
+  serverId,
   channels = [],
   categories = [],
   activeChannelId, 
@@ -35,6 +39,14 @@ export default function ChannelSidebar({
   const { userProfile, logout, currentUser } = useAuth()
   const [showServerDropdown, setShowServerDropdown] = useState(false)
   const [userRoleColor, setUserRoleColor] = useState('#99AAB5')
+  const [, setForceUpdate] = useState(0)
+
+  useEffect(() => {
+    const unsubscribe = notificationService.subscribe(() => {
+      setForceUpdate(prev => prev + 1)
+    })
+    return unsubscribe
+  }, [])
 
   useEffect(() => {
     const loadUserRoleColor = async () => {
@@ -72,6 +84,14 @@ export default function ChannelSidebar({
     return nonEveryoneRoles.reduce((highest, current) => 
       current.position > highest.position ? current : highest
     )
+  }
+
+  const hasUnreadMessages = (channelId: string): boolean => {
+    if (!channels.length) return false
+    const channel = channels.find(ch => ch.id === channelId)
+    if (!channel) return false
+    
+    return notificationService.hasUnreadInChannel(serverId, channelId)
   }
 
   const organizedChannels = categories
@@ -211,16 +231,29 @@ export default function ChannelSidebar({
                   <div
                     key={channel.id}
                     onClick={() => onChannelSelect(channel.id)}
-                    className={`flex items-center px-2 py-2 md:py-1.5 rounded cursor-pointer transition-colors group ${
+                    className={`flex items-center px-2 py-2 md:py-1.5 rounded cursor-pointer transition-all duration-300 group ${
                       activeChannelId === channel.id
                         ? 'bg-gray-700 text-white'
+                        : hasUnreadMessages(channel.id)
+                        ? 'text-white hover:bg-gray-700'
                         : 'text-gray-300 hover:bg-gray-700 hover:text-white'
                     }`}
                   >
-                    <span className="text-gray-400 mr-2">
+                    <span className={`mr-2 ${
+                      hasUnreadMessages(channel.id) && activeChannelId !== channel.id 
+                        ? 'text-white' 
+                        : 'text-gray-400'
+                    }`}>
                       {channel.type === 'text' ? '#' : '🔊'}
                     </span>
-                    <span className="text-sm truncate flex-1">{channel.name}</span>
+                    <span className={`text-sm truncate flex-1 ${
+                      hasUnreadMessages(channel.id) && activeChannelId !== channel.id 
+                        ? 'font-semibold text-white' 
+                        : ''
+                    }`}>{channel.name}</span>
+                    {hasUnreadMessages(channel.id) && activeChannelId !== channel.id && (
+                      <div className="w-3 h-3 bg-white rounded-full ml-1 white-dot-glow"></div>
+                    )}
                     {channel.permissions && channel.permissions.length > 0 && (
                       <svg className="w-3 h-3 text-yellow-400 ml-1 opacity-0 group-hover:opacity-100 transition-opacity" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
@@ -249,16 +282,29 @@ export default function ChannelSidebar({
                 <div
                   key={channel.id}
                   onClick={() => onChannelSelect(channel.id)}
-                  className={`flex items-center px-2 py-2 md:py-1.5 rounded cursor-pointer transition-colors group ${
+                  className={`flex items-center px-2 py-2 md:py-1.5 rounded cursor-pointer transition-all duration-300 group ${
                     activeChannelId === channel.id
                       ? 'bg-gray-700 text-white'
+                      : hasUnreadMessages(channel.id)
+                      ? 'text-white hover:bg-gray-700'
                       : 'text-gray-300 hover:bg-gray-700 hover:text-white'
                   }`}
                 >
-                  <span className="text-gray-400 mr-2">
+                  <span className={`mr-2 ${
+                    hasUnreadMessages(channel.id) && activeChannelId !== channel.id 
+                      ? 'text-white' 
+                      : 'text-gray-400'
+                  }`}>
                     {channel.type === 'text' ? '#' : '🔊'}
                   </span>
-                  <span className="text-sm truncate flex-1">{channel.name}</span>
+                  <span className={`text-sm truncate flex-1 ${
+                    hasUnreadMessages(channel.id) && activeChannelId !== channel.id 
+                      ? 'font-semibold text-white' 
+                      : ''
+                  }`}>{channel.name}</span>
+                  {hasUnreadMessages(channel.id) && activeChannelId !== channel.id && (
+                    <div className="w-3 h-3 bg-white rounded-full ml-1 white-dot-glow"></div>
+                  )}
                   {channel.permissions && channel.permissions.length > 0 && (
                     <svg className="w-3 h-3 text-yellow-400 ml-1 opacity-0 group-hover:opacity-100 transition-opacity" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />

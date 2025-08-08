@@ -6,6 +6,8 @@ import { messageService } from '../services/messageService'
 import { serverService } from '../services/serverService'
 import { permissionService } from '../services/permissionService'
 import { roleSyncService } from '../services/roleSyncService'
+import { notificationService } from '../services/notificationService'
+import { globalMessageListener } from '../services/globalMessageListener'
 import type { Server } from '../services/serverService'
 import ServerSidebar from '../components/ui/ServerSidebar'
 import ServerModal from '../components/ui/ServerModal'
@@ -67,6 +69,19 @@ export default function Home() {
     return () => window.removeEventListener('resize', checkMobile)
   }, [])
 
+  useEffect(() => {
+    if (currentUser && servers.length > 0) {
+      const serverIds = servers.map(s => s.id)
+      globalMessageListener.updateServers(currentUser.uid, serverIds)
+    }
+
+    return () => {
+      if (currentUser) {
+        globalMessageListener.stopGlobalListener()
+      }
+    }
+  }, [currentUser, servers])
+
   // Suscripción a mensajes con el nuevo sistema optimizado
   useEffect(() => {
     if (!activeServerId || !activeChannelId || !currentUser) {
@@ -94,13 +109,22 @@ export default function Home() {
 
   useEffect(() => {
     if (activeServer) {
-      const defaultChannel = activeServer.channels.find(ch => ch.name === 'general')
-      if (defaultChannel && defaultChannel.id !== activeChannelId) {
-        setActiveChannelId(defaultChannel.id)
-        localStorage.setItem('dogicord-active-channel', defaultChannel.id)
+      // Solo cambiar al canal general si no hay un canal activo válido en el servidor
+      const currentChannelExists = activeServer.channels.find(ch => ch.id === activeChannelId)
+      
+      if (!currentChannelExists) {
+        const defaultChannel = activeServer.channels.find(ch => ch.name === 'general')
+        if (defaultChannel) {
+          setActiveChannelId(defaultChannel.id)
+          localStorage.setItem('dogicord-active-channel', defaultChannel.id)
+        } else if (activeServer.channels.length > 0) {
+          // Si no hay canal 'general', usar el primer canal disponible
+          setActiveChannelId(activeServer.channels[0].id)
+          localStorage.setItem('dogicord-active-channel', activeServer.channels[0].id)
+        }
       }
     }
-  }, [activeServer, activeChannelId])
+  }, [activeServer])
 
   const updateUserRoles = useCallback((newRoles: Role[]) => {
     const oldRoleNames = userRoles.map(r => r.name).sort()
@@ -245,6 +269,9 @@ export default function Home() {
           return
         }
       }
+
+      // Marcar canal como leído al entrar
+      notificationService.markChannelAsRead(activeServer.id, channelId)
 
       // Limpiar mensajes antes de cambiar de canal
       setMessages([])
@@ -476,6 +503,7 @@ export default function Home() {
           <div className={`${mobileView === 'channels' ? 'block' : 'hidden'} h-full`}>
             <ChannelSidebar
               serverName={activeServer.name}
+              serverId={activeServerId!}
               channels={activeServer.channels.filter(ch => {
                 const viewPermCheck = permissionService.hasChannelPermission(
                   userRoles,
@@ -509,6 +537,7 @@ export default function Home() {
               }}
               serverName={activeServer.name}
               serverId={activeServerId}
+              channelId={activeChannelId}
               onShowMobileNav={() => setShowMobileNav(true)}
               onHideMobileNav={() => setShowMobileNav(false)}
               onToggleMemberList={handleToggleMemberList}
@@ -527,6 +556,7 @@ export default function Home() {
       <div className="flex-1 flex">
         <ChannelSidebar
           serverName={activeServer.name}
+          serverId={activeServerId!}
           channels={activeServer.channels.filter(ch => {
             const viewPermCheck = permissionService.hasChannelPermission(
               userRoles,
@@ -553,6 +583,7 @@ export default function Home() {
           isMobile={false}
           serverName={activeServer.name}
           serverId={activeServerId}
+          channelId={activeChannelId}
           onToggleMemberList={handleToggleMemberList}
           onUserClick={handleUserClick}
           currentUserId={currentUser?.uid || ''}

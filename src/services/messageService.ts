@@ -16,6 +16,7 @@ import {
 import { db } from '../config/firebase'
 import { serverService } from './serverService'
 import { permissionService } from './permissionService'
+import { notificationService } from './notificationService'
 import type { Role } from '../types/permissions'
 
 export interface Message {
@@ -33,16 +34,118 @@ export interface Message {
 
 interface MessageCache {
   messages: Message[]
+  lastUpdated: number
   hasMore: boolean
   isLoading: boolean
+}
+
+interface CachedChannelData {
+  messages: Message[]
+  lastUpdated: number
 }
 
 class MessageService {
   private messageCache = new Map<string, MessageCache>()
   private activeListeners = new Map<string, () => void>()
+  private readonly CACHE_EXPIRY_MS = 30 * 60 * 1000 // 30 minutos
+  private readonly MAX_CACHED_CHANNELS = 10
+  private cleanupInitialized = false
+
+  constructor() {
+    // Inicializar limpieza automática solo una vez
+    if (!this.cleanupInitialized) {
+      this.initializeCleanup()
+      this.cleanupInitialized = true
+    }
+  }
 
   private getCacheKey(serverId: string, channelId: string): string {
     return `${serverId}-${channelId}`
+  }
+
+  private getLocalStorageKey(serverId: string, channelId: string): string {
+    return `dogicord-messages-${serverId}-${channelId}`
+  }
+
+  private saveMessagesToLocalStorage(serverId: string, channelId: string, messages: Message[]): void {
+    try {
+      const cacheData: CachedChannelData = {
+        messages: messages.slice(-100), // Solo guardar los últimos 100 mensajes
+        lastUpdated: Date.now()
+      }
+      const key = this.getLocalStorageKey(serverId, channelId)
+      localStorage.setItem(key, JSON.stringify(cacheData))
+      
+      // Limpiar caché viejo
+      this.cleanupOldCache()
+    } catch (error) {
+      console.warn('Failed to save messages to localStorage:', error)
+    }
+  }
+
+  private loadMessagesFromLocalStorage(serverId: string, channelId: string): Message[] {
+    try {
+      const key = this.getLocalStorageKey(serverId, channelId)
+      const cached = localStorage.getItem(key)
+      
+      if (!cached) return []
+      
+      const cacheData: CachedChannelData = JSON.parse(cached)
+      
+      // Verificar si el caché no está expirado
+      if (Date.now() - cacheData.lastUpdated > this.CACHE_EXPIRY_MS) {
+        localStorage.removeItem(key)
+        return []
+      }
+      
+      // Convertir timestamps de string a Date
+      return cacheData.messages.map(msg => ({
+        ...msg,
+        timestamp: new Date(msg.timestamp),
+        editedAt: msg.editedAt ? new Date(msg.editedAt) : undefined
+      }))
+    } catch (error) {
+      console.warn('Failed to load messages from localStorage:', error)
+      return []
+    }
+  }
+
+  private cleanupOldCache(): void {
+    try {
+      const keys = Object.keys(localStorage).filter(key => key.startsWith('dogicord-messages-'))
+      
+      if (keys.length <= this.MAX_CACHED_CHANNELS) return
+      
+      // Ordenar por última actualización y eliminar los más viejos
+      const cacheInfo = keys.map(key => {
+        try {
+          const data = JSON.parse(localStorage.getItem(key) || '{}')
+          return { key, lastUpdated: data.lastUpdated || 0 }
+        } catch {
+          return { key, lastUpdated: 0 }
+        }
+      }).sort((a, b) => a.lastUpdated - b.lastUpdated)
+      
+      // Eliminar los más viejos
+      const toRemove = cacheInfo.slice(0, keys.length - this.MAX_CACHED_CHANNELS)
+      toRemove.forEach(item => localStorage.removeItem(item.key))
+    } catch (error) {
+      console.warn('Failed to cleanup old cache:', error)
+    }
+  }
+
+  private mergeMessages(cachedMessages: Message[], realtimeMessages: Message[]): Message[] {
+    const messageMap = new Map<string, Message>()
+    
+    // Agregar mensajes en caché
+    cachedMessages.forEach(msg => messageMap.set(msg.id, msg))
+    
+    // Agregar/actualizar con mensajes en tiempo real
+    realtimeMessages.forEach(msg => messageMap.set(msg.id, msg))
+    
+    // Convertir de vuelta a array y ordenar
+    return Array.from(messageMap.values())
+      .sort((a, b) => a.timestamp.getTime() - b.timestamp.getTime())
   }
 
   async sendMessage(
@@ -226,7 +329,14 @@ class MessageService {
 
     console.log('Setting up message subscription for:', cacheKey)
 
-    // Configurar listener en tiempo real simple y directo
+    // Cargar mensajes desde localStorage inmediatamente
+    const cachedMessages = this.loadMessagesFromLocalStorage(serverId, channelId)
+    if (cachedMessages.length > 0) {
+      console.log('Loaded', cachedMessages.length, 'messages from cache')
+      callback(cachedMessages)
+    }
+
+    // Configurar listener en tiempo real
     const q = query(
       collection(db, 'messages'),
       where('serverId', '==', serverId),
@@ -253,18 +363,13 @@ class MessageService {
         }
       }
 
-      const messages: Message[] = []
+      const realtimeMessages: Message[] = []
       
       querySnapshot.forEach((doc) => {
         const data = doc.data()
         const messageDate = data.timestamp ? (data.timestamp as Timestamp).toDate() : new Date()
 
-        // Si no tiene permiso de historial, solo mostrar mensajes recientes
-        if (userId) {
-          // Por ahora mostrar todos los mensajes - se puede optimizar después
-        }
-
-        messages.push({
+        realtimeMessages.push({
           id: doc.id,
           content: data.content,
           authorId: data.authorId,
@@ -278,11 +383,46 @@ class MessageService {
         })
       })
 
-      console.log('Processed messages:', messages.length)
-      callback(messages)
+      // Detectar mensajes nuevos para notificaciones
+      const previousLength = this.messageCache.get(this.getCacheKey(serverId, channelId))?.messages.length || 0
+      if (realtimeMessages.length > previousLength && userId) {
+        const newMessages = realtimeMessages.slice(previousLength)
+        newMessages.forEach(msg => {
+          if (msg.authorId !== userId) {
+            notificationService.addUnreadMessage(
+              serverId, 
+              channelId, 
+              msg.id, 
+              msg.timestamp.getTime()
+            )
+          }
+        })
+      }
+
+      // Actualizar caché en memoria
+      this.messageCache.set(this.getCacheKey(serverId, channelId), {
+        messages: realtimeMessages,
+        lastUpdated: Date.now(),
+        hasMore: false,
+        isLoading: false
+      })
+
+      // Fusionar mensajes en caché con mensajes en tiempo real
+      const mergedMessages = this.mergeMessages(cachedMessages, realtimeMessages)
+      
+      // Guardar en localStorage
+      this.saveMessagesToLocalStorage(serverId, channelId, mergedMessages)
+      
+      console.log('Processed messages:', mergedMessages.length, '(cached:', cachedMessages.length, ', realtime:', realtimeMessages.length, ')')
+      callback(mergedMessages)
     }, (error) => {
       console.error('Error in message subscription:', error)
-      callback([])
+      // Si hay error, al menos mostrar los mensajes en caché
+      if (cachedMessages.length > 0) {
+        callback(cachedMessages)
+      } else {
+        callback([])
+      }
     })
 
     const cleanup = () => {
@@ -325,16 +465,56 @@ class MessageService {
     if (serverId && channelId) {
       const cacheKey = this.getCacheKey(serverId, channelId)
       this.messageCache.delete(cacheKey)
+      
+      // También limpiar localStorage
+      const localStorageKey = this.getLocalStorageKey(serverId, channelId)
+      localStorage.removeItem(localStorageKey)
     } else {
       this.messageCache.clear()
+      
+      // Limpiar todo el localStorage de mensajes
+      const keys = Object.keys(localStorage).filter(key => key.startsWith('dogicord-messages-'))
+      keys.forEach(key => localStorage.removeItem(key))
     }
   }
 
-  getCacheStats(): { cacheSize: number, activeListeners: number } {
+  clearExpiredCache(): void {
+    try {
+      const keys = Object.keys(localStorage).filter(key => key.startsWith('dogicord-messages-'))
+      
+      keys.forEach(key => {
+        try {
+          const data = JSON.parse(localStorage.getItem(key) || '{}')
+          if (Date.now() - (data.lastUpdated || 0) > this.CACHE_EXPIRY_MS) {
+            localStorage.removeItem(key)
+          }
+        } catch {
+          localStorage.removeItem(key)
+        }
+      })
+    } catch (error) {
+      console.warn('Failed to cleanup expired cache:', error)
+    }
+  }
+
+  getCacheStats(): { cacheSize: number, activeListeners: number, localStorageChannels: number } {
+    const localStorageKeys = Object.keys(localStorage).filter(key => key.startsWith('dogicord-messages-'))
+    
     return {
       cacheSize: this.messageCache.size,
-      activeListeners: this.activeListeners.size
+      activeListeners: this.activeListeners.size,
+      localStorageChannels: localStorageKeys.length
     }
+  }
+
+  // Inicializar limpieza automática al cargar
+  private initializeCleanup(): void {
+    this.clearExpiredCache()
+    
+    // Limpiar caché expirado cada 5 minutos
+    setInterval(() => {
+      this.clearExpiredCache()
+    }, 5 * 60 * 1000)
   }
 
   async validateMessageContent(content: string, userRoles: Role[], isOwner: boolean = false): Promise<{

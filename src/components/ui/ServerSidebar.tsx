@@ -1,3 +1,7 @@
+import { useState, useEffect } from 'react'
+import { notificationService } from '../../services/notificationService'
+import '../../styles/glow.css'
+
 interface Server {
   id: string
   name: string
@@ -20,8 +24,21 @@ export default function ServerSidebar({
   onAddServerClick,
   isMobile 
 }: ServerSidebarProps) {
+  const [, setForceUpdate] = useState(0)
+
+  useEffect(() => {
+    const unsubscribe = notificationService.subscribe(() => {
+      setForceUpdate(prev => prev + 1)
+    })
+    return unsubscribe
+  }, [])
+
   const getServerInitial = (name: string): string => {
     return name.charAt(0).toUpperCase()
+  }
+
+  const hasUnreadMessages = (serverId: string): boolean => {
+    return notificationService.hasUnreadInServer(serverId)
   }
 
   if (isMobile) {
@@ -44,7 +61,7 @@ export default function ServerSidebar({
               <div key={server.id} className="relative flex flex-col items-center">
                 <div
                   onClick={() => onServerSelect(server.id)}
-                  className={`w-16 h-16 rounded-2xl hover:rounded-xl transition-all duration-200 flex items-center justify-center cursor-pointer group overflow-hidden ${
+                  className={`relative w-16 h-16 rounded-2xl hover:rounded-xl transition-all duration-200 flex items-center justify-center cursor-pointer group overflow-hidden ${
                     activeServerId === server.id
                       ? 'bg-slate-600 rounded-xl ring-2 ring-slate-500'
                       : 'bg-gray-700 hover:bg-slate-600'
@@ -60,6 +77,9 @@ export default function ServerSidebar({
                     <span className="text-white font-bold text-lg">
                       {getServerInitial(server.name)}
                     </span>
+                  )}
+                  {hasUnreadMessages(server.id) && activeServerId !== server.id && (
+                    <div className="absolute -top-1 -right-1 w-4 h-4 bg-white rounded-full border-2 border-gray-900 white-dot-glow"></div>
                   )}
                 </div>
                 <p className="text-center text-gray-400 text-xs mt-1 truncate w-full">
@@ -98,7 +118,7 @@ export default function ServerSidebar({
           <div key={server.id} className="relative">
             <div
               onClick={() => onServerSelect(server.id)}
-              className={`w-12 h-12 rounded-2xl hover:rounded-xl transition-all duration-200 flex items-center justify-center cursor-pointer group overflow-hidden ${
+              className={`relative w-12 h-12 rounded-2xl hover:rounded-xl transition-all duration-200 flex items-center justify-center cursor-pointer group overflow-hidden ${
                 activeServerId === server.id
                   ? 'bg-slate-600 rounded-xl'
                   : 'bg-gray-700 hover:bg-slate-600'
@@ -114,6 +134,9 @@ export default function ServerSidebar({
                 <span className="text-white font-bold text-lg">
                   {getServerInitial(server.name)}
                 </span>
+              )}
+              {hasUnreadMessages(server.id) && activeServerId !== server.id && (
+                <div className="absolute -top-1 -right-1 w-3 h-3 bg-white rounded-full border-2 border-gray-900 white-dot-glow"></div>
               )}
             </div>
             
