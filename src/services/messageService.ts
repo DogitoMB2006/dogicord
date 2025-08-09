@@ -435,7 +435,15 @@ class MessageService {
       if (realtimeMessages.length > previousLength && userId) {
         const newMessages = realtimeMessages.slice(previousLength)
         newMessages.forEach(msg => {
-          if (msg.authorId !== userId) {
+          // Use the improved unread detection logic
+          if (notificationService.isMessageUnread(
+            serverId, 
+            channelId, 
+            msg.id, 
+            msg.timestamp.getTime(), 
+            msg.authorId, 
+            userId
+          )) {
             notificationService.addUnreadMessage(
               serverId, 
               channelId, 

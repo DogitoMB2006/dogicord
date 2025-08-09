@@ -38,7 +38,16 @@ class GlobalMessageListener {
 
             const lastTimestamp = this.lastMessageTimestamps.get(`${serverId}-${data.channelId}`) || 0
             
-            if (messageTimestamp > lastTimestamp && data.authorId !== userId) {
+            // Use improved unread detection logic
+            if (messageTimestamp > lastTimestamp && 
+                notificationService.isMessageUnread(
+                  data.serverId,
+                  data.channelId,
+                  change.doc.id,
+                  messageTimestamp,
+                  data.authorId,
+                  userId
+                )) {
               notificationService.addUnreadMessage(
                 data.serverId,
                 data.channelId,

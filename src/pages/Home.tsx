@@ -8,6 +8,7 @@ import { roleSyncService } from '../services/roleSyncService'
 import { notificationService } from '../services/notificationService'
 import { globalMessageListener } from '../services/globalMessageListener'
 import { useAppUpdate } from '../hooks/useAppUpdate'
+import { useReadTracker } from '../hooks/useReadTracker'
 import type { Server } from '../services/serverService'
 import ServerSidebar from '../components/ui/ServerSidebar'
 import ServerModal from '../components/ui/ServerModal'
@@ -53,6 +54,15 @@ export default function Home() {
   const [error, setError] = useState('')
   const [userRoles, setUserRoles] = useState<Role[]>([])
   const [mobileView, setMobileView] = useState<MobileView>('chat')
+  
+  // Auto-mark messages as read when viewing channel
+  const { markAsReadNow } = useReadTracker({
+    serverId: activeServerId || '',
+    channelId: activeChannelId,
+    isActive: Boolean(activeServerId && activeChannelId && mobileView === 'chat'),
+    messages,
+    currentUserId: currentUser?.uid
+  })
   const [isMobile, setIsMobile] = useState(false)
   const [showMobileNav, setShowMobileNav] = useState(true)
   const [showMemberList, setShowMemberList] = useState(() => {
@@ -273,6 +283,12 @@ export default function Home() {
         }
       }
 
+      // Mark previous channel as read when switching away
+      if (activeChannelId && channelId !== activeChannelId) {
+        markAsReadNow()
+      }
+
+      // Mark new channel as read
       notificationService.markChannelAsRead(activeServer.id, channelId)
 
       setActiveChannelId(channelId)

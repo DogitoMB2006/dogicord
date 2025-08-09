@@ -6,6 +6,8 @@ interface UnreadData {
   count: number
   lastMessageId: string
   lastMessageTimestamp: number
+  lastReadMessageId?: string
+  lastReadTimestamp?: number
 }
 
 class NotificationService {
@@ -55,14 +57,64 @@ class NotificationService {
     this.saveUnreadData(data)
   }
 
-  markChannelAsRead(serverId: string, channelId: string): void {
+  markChannelAsRead(serverId: string, channelId: string, lastReadMessageId?: string): void {
     const data = this.getUnreadData()
     const key = this.getChannelKey(serverId, channelId)
     
     if (data[key]) {
-      delete data[key]
+      // If we have a specific message ID, update the read tracking
+      if (lastReadMessageId) {
+        data[key].lastReadMessageId = lastReadMessageId
+        data[key].lastReadTimestamp = Date.now()
+        data[key].count = 0 // Reset count to 0
+      } else {
+        // Complete removal - no unread messages
+        delete data[key]
+      }
       this.saveUnreadData(data)
     }
+  }
+
+  // New method to mark messages as read up to a specific message
+  markMessagesAsReadUpTo(serverId: string, channelId: string, messageId: string, messageTimestamp: number): void {
+    const data = this.getUnreadData()
+    const key = this.getChannelKey(serverId, channelId)
+    
+    if (data[key]) {
+      // Only mark as read if the message is newer than or equal to what we're marking as read
+      if (messageTimestamp >= (data[key].lastReadTimestamp || 0)) {
+        data[key].lastReadMessageId = messageId
+        data[key].lastReadTimestamp = messageTimestamp
+        
+        // Recalculate unread count based on messages after this timestamp
+        // For now, we'll just set count to 0 since the user has seen up to this message
+        data[key].count = 0
+        this.saveUnreadData(data)
+      }
+    }
+  }
+
+  // Check if a specific message should be considered unread
+  isMessageUnread(serverId: string, channelId: string, _messageId: string, messageTimestamp: number, authorId: string, currentUserId?: string): boolean {
+    // Don't mark own messages as unread
+    if (authorId === currentUserId) {
+      return false
+    }
+
+    const data = this.getUnreadData()
+    const key = this.getChannelKey(serverId, channelId)
+    
+    if (!data[key]) {
+      return false // No unread data means all messages are considered read
+    }
+
+    // If we have a last read message timestamp, compare with that
+    if (data[key].lastReadTimestamp) {
+      return messageTimestamp > data[key].lastReadTimestamp
+    }
+
+    // Fallback to checking if this message is after our last recorded unread
+    return messageTimestamp > (data[key].lastMessageTimestamp || 0)
   }
 
   getUnreadCountForChannel(serverId: string, channelId: string): number {
