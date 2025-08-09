@@ -1,7 +1,5 @@
-// Test API to verify Firebase Admin SDK configuration
 
 export default async function handler(req, res) {
-  // Enable CORS
   res.setHeader('Access-Control-Allow-Origin', '*')
   res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS')
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type')
@@ -13,7 +11,6 @@ export default async function handler(req, res) {
   try {
     console.log('Test config API called')
     
-    // Check if all required environment variables are present
     const requiredVars = [
       'FIREBASE_PROJECT_ID',
       'FIREBASE_PRIVATE_KEY_ID', 
@@ -45,11 +42,9 @@ export default async function handler(req, res) {
       })
     }
 
-    // Test Firebase Admin SDK initialization (without actually initializing)
     const hasValidPrivateKey = process.env.FIREBASE_PRIVATE_KEY && 
                                process.env.FIREBASE_PRIVATE_KEY.includes('BEGIN PRIVATE KEY')
     
-    // Check firebase-admin package
     let hasFirebaseAdmin = false
     try {
       await import('firebase-admin')

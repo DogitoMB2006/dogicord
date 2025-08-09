@@ -126,7 +126,6 @@ class MessageService {
         }
       }).sort((a, b) => a.lastUpdated - b.lastUpdated)
       
-      // Eliminar los más viejos
       const toRemove = cacheInfo.slice(0, keys.length - this.MAX_CACHED_CHANNELS)
       toRemove.forEach(item => localStorage.removeItem(item.key))
     } catch (error) {
@@ -208,7 +207,6 @@ class MessageService {
 
       console.log('Message sent to Firestore successfully')
 
-      // Send FCM notifications via Vercel API
       try {
         const message: Message = {
           id: docRef.id,
@@ -223,11 +221,9 @@ class MessageService {
           replyTo
         }
         
-        // Send push notifications to server members via Vercel API
         await this.sendNotificationViaAPI(message, server.name, channel.name)
       } catch (notificationError) {
         console.warn('Failed to send push notifications:', notificationError)
-        // Don't throw error here - message was sent successfully, notifications are optional
       }
 
     } catch (error: any) {
@@ -236,7 +232,6 @@ class MessageService {
     }
   }
 
-  // Send notification via Vercel API
   private async sendNotificationViaAPI(message: Message, serverName: string, channelName: string): Promise<void> {
     try {
       const response = await fetch('/api/send-notification', {
@@ -496,11 +491,12 @@ class MessageService {
       const userRoles = await serverService.getUserRoles(serverId, userId)
       const isOwner = server.ownerId === userId
 
-      const viewPermCheck = permissionService.hasChannelPermission(userRoles, channel, 'view_channel', isOwner)
+      // Use the enhanced permission service for better channel visibility logic
+      const canView = permissionService.canUserSeeChannel(userRoles, channel, isOwner)
       const historyPermCheck = permissionService.hasChannelPermission(userRoles, channel, 'read_message_history', isOwner)
 
       return {
-        canView: viewPermCheck.allowed,
+        canView,
         canReadHistory: historyPermCheck.allowed
       }
     } catch (error) {

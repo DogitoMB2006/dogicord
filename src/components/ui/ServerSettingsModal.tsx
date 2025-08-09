@@ -155,7 +155,7 @@ export default function ServerSettingsModal({
   const handleCreateChannelWithPermissions = async (name: string, type: 'text' | 'voice', categoryId: string, permissions: ChannelPermission[]) => {
     try {
       await serverService.createChannelWithPermissions(server.id, name, type, categoryId, permissions)
-      window.location.reload()
+      // Real-time listener will automatically update the state
     } catch (error: any) {
       throw error
     }
@@ -164,7 +164,7 @@ export default function ServerSettingsModal({
   const handleUpdateChannel = async (channelId: string, updates: Partial<Channel>) => {
     try {
       await serverService.updateChannelWithPermissions(server.id, channelId, updates)
-      window.location.reload()
+      // Real-time listener will automatically update the state
     } catch (error: any) {
       throw error
     }
@@ -173,7 +173,7 @@ export default function ServerSettingsModal({
   const handleDeleteChannelAdvanced = async (channelId: string) => {
     try {
       await serverService.deleteChannel(server.id, channelId)
-      window.location.reload()
+      // Real-time listener will automatically update the state
     } catch (error: any) {
       throw error
     }
@@ -182,7 +182,7 @@ export default function ServerSettingsModal({
   const handleCreateCategory = async (name: string, permissions: ChannelPermission[]) => {
     try {
       await serverService.createCategory(server.id, name, permissions)
-      window.location.reload()
+      // Real-time listener will automatically update the state
     } catch (error: any) {
       throw error
     }
@@ -191,7 +191,7 @@ export default function ServerSettingsModal({
   const handleUpdateCategory = async (categoryId: string, updates: Partial<Category>) => {
     try {
       await serverService.updateCategory(server.id, categoryId, updates)
-      window.location.reload()
+      // Real-time listener will automatically update the state
     } catch (error: any) {
       throw error
     }
@@ -200,7 +200,7 @@ export default function ServerSettingsModal({
   const handleDeleteCategory = async (categoryId: string) => {
     try {
       await serverService.deleteCategory(server.id, categoryId)
-      window.location.reload()
+      // Real-time listener will automatically update the state
     } catch (error: any) {
       throw error
     }
@@ -214,7 +214,7 @@ export default function ServerSettingsModal({
       }
       
       await serverService.createRole(server.id, name, color, permissions)
-      window.location.reload()
+      // Real-time listener will automatically update the state
     } catch (error: any) {
       throw error
     }
@@ -230,7 +230,7 @@ export default function ServerSettingsModal({
       }
       
       await serverService.updateRole(server.id, roleId, updates)
-      window.location.reload()
+      // Real-time listener will automatically update the state
     } catch (error: any) {
       throw error
     }
@@ -239,7 +239,7 @@ export default function ServerSettingsModal({
   const handleDeleteRole = async (roleId: string) => {
     try {
       await serverService.deleteRole(server.id, roleId)
-      window.location.reload()
+      // Real-time listener will automatically update the state
     } catch (error: any) {
       throw error
     }
@@ -248,7 +248,7 @@ export default function ServerSettingsModal({
   const handleReorderRoles = async (roles: Role[]) => {
     try {
       await serverService.reorderRoles(server.id, roles)
-      window.location.reload()
+      // Real-time listener will automatically update the state
     } catch (error: any) {
       throw error
     }

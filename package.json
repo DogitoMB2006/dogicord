@@ -1,13 +1,15 @@
 {
   "name": "dogicord",
   "private": true,
-  "version": "0.0.0",
+  "version": "1.0.0",
   "type": "module",
   "scripts": {
     "dev": "vite",
+    "prebuild": "node scripts/generate-version.js",
     "build": "tsc -b && vite build",
     "lint": "eslint .",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "version:generate": "node scripts/generate-version.js"
   },
   "dependencies": {
     "@tailwindcss/vite": "^4.1.11",

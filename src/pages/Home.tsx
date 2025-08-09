@@ -7,6 +7,7 @@ import { permissionService } from '../services/permissionService'
 import { roleSyncService } from '../services/roleSyncService'
 import { notificationService } from '../services/notificationService'
 import { globalMessageListener } from '../services/globalMessageListener'
+import { useAppUpdate } from '../hooks/useAppUpdate'
 import type { Server } from '../services/serverService'
 import ServerSidebar from '../components/ui/ServerSidebar'
 import ServerModal from '../components/ui/ServerModal'
@@ -16,6 +17,7 @@ import ServerSettingsModal from '../components/ui/ServerSettingsModal'
 import ProfileModal from '../components/ui/ProfileModal'
 import MemberList from '../components/ui/MemberList'
 import UserProfileModal from '../components/ui/UserProfileModal'
+import UpdateModal from '../components/ui/UpdateModal'
 import type { Message } from '../services/messageService'
 import type { Role } from '../types/permissions'
 
@@ -33,6 +35,13 @@ export default function Home() {
     selectServer,
     refreshServers
   } = useServer()
+  const { 
+    currentVersion, 
+    latestVersion, 
+    isModalOpen: isUpdateModalOpen, 
+    applyUpdate, 
+    dismissUpdate 
+  } = useAppUpdate()
   
   const [activeChannelId, setActiveChannelId] = useState<string>(() => {
     return localStorage.getItem('dogicord-active-channel') || 'general'
@@ -496,16 +505,10 @@ export default function Home() {
             <ChannelSidebar
               serverName={activeServer.name}
               serverId={activeServerId!}
-              channels={activeServer.channels.filter(ch => {
-                const viewPermCheck = permissionService.hasChannelPermission(
-                  userRoles,
-                  ch,
-                  'view_channel',
-                  isOwner()
-                )
-                return viewPermCheck.allowed
-              })}
+              channels={activeServer.channels}
               categories={activeServer.categories}
+              userRoles={userRoles}
+              isOwner={isOwner()}
               activeChannelId={activeChannelId}
               onChannelSelect={handleChannelSelect}
               onLeaveServer={handleLeaveServer}
@@ -548,16 +551,10 @@ export default function Home() {
         <ChannelSidebar
           serverName={activeServer.name}
           serverId={activeServerId!}
-          channels={activeServer.channels.filter(ch => {
-            const viewPermCheck = permissionService.hasChannelPermission(
-              userRoles,
-              ch,
-              'view_channel',
-              isOwner()
-            )
-            return viewPermCheck.allowed
-          })}
+          channels={activeServer.channels}
           categories={activeServer.categories}
+          userRoles={userRoles}
+          isOwner={isOwner()}
           activeChannelId={activeChannelId}
           onChannelSelect={handleChannelSelect}
           onLeaveServer={handleLeaveServer}
@@ -715,6 +712,15 @@ export default function Home() {
           onRoleUpdate={handleRoleUpdate}
         />
       )}
+
+      {/* Update Modal */}
+      <UpdateModal
+        isOpen={isUpdateModalOpen}
+        onUpdate={applyUpdate}
+        onDismiss={dismissUpdate}
+        currentVersion={currentVersion || undefined}
+        latestVersion={latestVersion || undefined}
+      />
     </div>
   )
 }

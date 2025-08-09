@@ -27,36 +27,52 @@ export const permissionService = {
       return { allowed: true }
     }
 
+    // First check if user can view the channel at all
+    if (permission !== 'view_channel') {
+      const canViewChannel = this.hasChannelPermission(userRoles, channel, 'view_channel', isOwner)
+      if (!canViewChannel.allowed) {
+        return { 
+          allowed: false, 
+          reason: 'Cannot access channel' 
+        }
+      }
+    }
+
+    // Check for explicit denies first (highest priority)
     for (const role of userRoles) {
       const channelOverride = channel.permissions?.find(p => p.roleId === role.id)
-      
-      if (channelOverride) {
-        if (channelOverride.deny.includes(permission)) {
-          return { 
-            allowed: false, 
-            reason: `Permission denied by channel override for role ${role.name}` 
-          }
-        }
-        
-        if (channelOverride.allow.includes(permission)) {
-          return { allowed: true }
+      if (channelOverride && channelOverride.deny.includes(permission)) {
+        return { 
+          allowed: false, 
+          reason: `Permission explicitly denied for role ${role.name}` 
         }
       }
-      
-      const serverPermissionMap: Record<ChannelPermissionType, string[]> = {
-        'view_channel': ['view_channels'],
-        'send_messages': ['send_messages'],
-        'manage_messages': ['manage_messages'],
-        'read_message_history': ['read_message_history'],
-        'use_voice_activity': ['use_voice_activity'],
-        'speak': ['speak'],
-        'mute_members': ['mute_members'],
-        'deafen_members': ['deafen_members'],
-        'move_members': ['move_members']
+    }
+
+    // Then check for explicit allows
+    for (const role of userRoles) {
+      const channelOverride = channel.permissions?.find(p => p.roleId === role.id)
+      if (channelOverride && channelOverride.allow.includes(permission)) {
+        return { allowed: true }
       }
-      
-      const requiredServerPerms = serverPermissionMap[permission] || []
-      
+    }
+
+    // Finally check server-level permissions as fallback
+    const serverPermissionMap: Record<ChannelPermissionType, string[]> = {
+      'view_channel': ['view_channels'],
+      'send_messages': ['send_messages'],
+      'manage_messages': ['manage_messages'],
+      'read_message_history': ['read_message_history'],
+      'use_voice_activity': ['use_voice_activity'],
+      'speak': ['speak'],
+      'mute_members': ['mute_members'],
+      'deafen_members': ['deafen_members'],
+      'move_members': ['move_members']
+    }
+    
+    const requiredServerPerms = serverPermissionMap[permission] || []
+    
+    for (const role of userRoles) {
       for (const serverPerm of requiredServerPerms) {
         if (role.permissions.includes(serverPerm)) {
           return { allowed: true }
@@ -64,10 +80,47 @@ export const permissionService = {
       }
     }
 
+    // Special case for view_channel: if no explicit permissions are set, 
+    // check if @everyone has been explicitly denied
+    if (permission === 'view_channel') {
+      const everyoneRole = userRoles.find(role => role.name === '@everyone')
+      if (everyoneRole) {
+        const everyoneOverride = channel.permissions?.find(p => p.roleId === everyoneRole.id)
+        if (everyoneOverride && everyoneOverride.deny.includes('view_channel')) {
+          // @everyone is denied, check if user has any other roles that explicitly allow
+          const nonEveryoneRoles = userRoles.filter(role => role.name !== '@everyone')
+          for (const role of nonEveryoneRoles) {
+            const roleOverride = channel.permissions?.find(p => p.roleId === role.id)
+            if (roleOverride && roleOverride.allow.includes('view_channel')) {
+              return { allowed: true }
+            }
+          }
+          return { 
+            allowed: false, 
+            reason: 'Channel is private and user does not have access' 
+          }
+        }
+      }
+      
+      // Default: if no explicit permissions, allow view access
+      return { allowed: true }
+    }
+
     return { 
       allowed: false, 
       reason: `No permission found for ${permission}` 
     }
+  },
+
+  // New method to check if a user can see a channel at all
+  canUserSeeChannel(userRoles: Role[], channel: Channel, isOwner: boolean = false): boolean {
+    const result = this.hasChannelPermission(userRoles, channel, 'view_channel', isOwner)
+    return result.allowed
+  },
+
+  // New method to filter channels based on user permissions
+  getVisibleChannels(userRoles: Role[], channels: Channel[], isOwner: boolean = false): Channel[] {
+    return channels.filter(channel => this.canUserSeeChannel(userRoles, channel, isOwner))
   },
 
   canAccessServerSettings(userRoles: Role[], isOwner: boolean = false): {

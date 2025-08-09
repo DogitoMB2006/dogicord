@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import { useAuth } from '../../contexts/AuthContext'
 import { serverService } from '../../services/serverService'
 import { notificationService } from '../../services/notificationService'
+import { permissionService } from '../../services/permissionService'
 import type { Channel, Category } from '../../types/channels'
 import type { Role } from '../../types/permissions'
 import NotificationSettingsModal from './NotificationSettingsModal'
@@ -12,6 +13,8 @@ interface ChannelSidebarProps {
   serverId: string
   channels: Channel[]
   categories: Category[]
+  userRoles: Role[]
+  isOwner: boolean
   activeChannelId?: string
   onChannelSelect: (channelId: string) => void
   onLeaveServer: () => void
@@ -27,6 +30,8 @@ export default function ChannelSidebar({
   serverId,
   channels = [],
   categories = [],
+  userRoles = [],
+  isOwner = false,
   activeChannelId, 
   onChannelSelect,
   onLeaveServer,
@@ -98,16 +103,20 @@ export default function ChannelSidebar({
     return notificationService.hasUnreadInChannel(serverId, channelId)
   }
 
+  // Filter channels based on user permissions
+  const visibleChannels = permissionService.getVisibleChannels(userRoles, channels, isOwner)
+
   const organizedChannels = categories
     .sort((a, b) => a.position - b.position)
     .map(category => ({
       category,
-      channels: channels
+      channels: visibleChannels
         .filter(ch => ch.categoryId === category.id)
         .sort((a, b) => a.position - b.position)
     }))
+    .filter(group => group.channels.length > 0) // Only show categories that have visible channels
 
-  const uncategorizedChannels = channels
+  const uncategorizedChannels = visibleChannels
     .filter(ch => !categories.find(cat => cat.id === ch.categoryId))
     .sort((a, b) => a.position - b.position)
 
