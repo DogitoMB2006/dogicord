@@ -23,26 +23,40 @@ class OneSignalService {
     this.appId = config.appId
 
     try {
-      // Load OneSignal SDK
-      await this.loadOneSignalSDK()
-      
-      // OneSignal is already initialized in index.html, just use it
-      if (!window.OneSignal) {
-        throw new Error('OneSignal SDK not loaded')
+      // Wait for OneSignal to be available (it's loaded in index.html)
+      let retries = 0
+      while (!window.OneSignal && retries < 10) {
+        await new Promise(resolve => setTimeout(resolve, 500))
+        retries++
       }
       
-      // OneSignal is already initialized via the global script in index.html
-      // Just wait for it to be ready
-      await window.OneSignal.isReady()
+      if (!window.OneSignal) {
+        throw new Error('OneSignal SDK not loaded after waiting')
+      }
+
+      // Wait for OneSignal to be fully initialized
+      await new Promise(resolve => setTimeout(resolve, 2000))
 
       // Set external user ID for targeting
-      await window.OneSignal.setExternalUserId(userId)
+      try {
+        await window.OneSignal.setExternalUserId(userId)
+        console.log('✅ OneSignal external user ID set:', userId)
+      } catch (error) {
+        console.warn('⚠️ Failed to set external user ID:', error)
+      }
 
-      // Request permission
-      await window.OneSignal.showNativePrompt()
+      // Request permission if not already granted
+      try {
+        const permission = await window.OneSignal.getNotificationPermission()
+        if (permission !== 'granted') {
+          await window.OneSignal.showNativePrompt()
+        }
+      } catch (error) {
+        console.warn('⚠️ Failed to request permission:', error)
+      }
 
       this.isInitialized = true
-      console.log('✅ OneSignal initialized successfully')
+      console.log('✅ OneSignal service initialized successfully')
 
       // Debug functions
       ;(window as any).oneSignalStatus = () => this.getStatus()
@@ -51,25 +65,12 @@ class OneSignalService {
 
     } catch (error) {
       console.error('❌ OneSignal initialization failed:', error)
-      throw error
+      // Don't throw error, just mark as not initialized
+      this.isInitialized = false
     }
   }
 
-  private async loadOneSignalSDK(): Promise<void> {
-    return new Promise((resolve, reject) => {
-      if (window.OneSignal) {
-        resolve()
-        return
-      }
 
-      const script = document.createElement('script')
-      script.src = 'https://cdn.onesignal.com/sdks/OneSignalSDK.js'
-      script.async = true
-      script.onload = () => resolve()
-      script.onerror = () => reject(new Error('Failed to load OneSignal SDK'))
-      document.head.appendChild(script)
-    })
-  }
 
   async sendNotificationToUser(targetUserId: string, notification: NotificationData): Promise<boolean> {
     if (!this.appId) {
