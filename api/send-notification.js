@@ -195,7 +195,7 @@ export default async function handler(req, res) {
       const apns = {
         headers: {
           'apns-priority': '10',
-          'apns-expiration': Math.floor(Date.now() / 1000) + 300
+          'apns-expiration': String(Math.floor(Date.now() / 1000) + 300)
         },
         payload: {
           aps: {
