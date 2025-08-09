@@ -97,13 +97,11 @@ export default function ChannelSidebar({
     const channel = channels.find(ch => ch.id === channelId)
     if (!channel) return false
     
-    // No mostrar indicador si es el canal activo
     if (activeChannelId === channelId) return false
     
     return notificationService.hasUnreadInChannel(serverId, channelId)
   }
 
-  // Filter channels based on user permissions
   const visibleChannels = permissionService.getVisibleChannels(userRoles, channels, isOwner)
 
   const organizedChannels = categories
@@ -114,7 +112,7 @@ export default function ChannelSidebar({
         .filter(ch => ch.categoryId === category.id)
         .sort((a, b) => a.position - b.position)
     }))
-    .filter(group => group.channels.length > 0) // Only show categories that have visible channels
+    .filter(group => group.channels.length > 0) 
 
   const uncategorizedChannels = visibleChannels
     .filter(ch => !categories.find(cat => cat.id === ch.categoryId))

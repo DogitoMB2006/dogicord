@@ -105,15 +105,13 @@ class NotificationService {
     const key = this.getChannelKey(serverId, channelId)
     
     if (!data[key]) {
-      return false // No unread data means all messages are considered read
+      return false 
     }
 
-    // If we have a last read message timestamp, compare with that
     if (data[key].lastReadTimestamp) {
       return messageTimestamp > data[key].lastReadTimestamp
     }
 
-    // Fallback to checking if this message is after our last recorded unread
     return messageTimestamp > (data[key].lastMessageTimestamp || 0)
   }
 
