@@ -56,6 +56,8 @@ export default function ChatArea({
   const messagesContainerRef = useRef<HTMLDivElement>(null)
   const messageInputRef = useRef<HTMLInputElement>(null)
   const previousMessagesLengthRef = useRef(messages.length)
+  const currentChannelRef = useRef(channelId)
+  const scrollTimeoutRef = useRef<NodeJS.Timeout | null>(null)
 
   const allMessages = [...messages, ...optimisticMessages]
 
@@ -63,25 +65,43 @@ export default function ChatArea({
     const container = messagesContainerRef.current
     
     if (container && allMessages.length > 0 && !hasScrolledToLastPosition) {
-      // Force scroll to bottom
-      setTimeout(() => {
-        if (container) {
+      if (scrollTimeoutRef.current) {
+        clearTimeout(scrollTimeoutRef.current)
+      }
+      
+      const scrollToBottomWithRetries = (retries = 0) => {
+        if (container && retries < 5) { // Try up to 5 times
           container.scrollTop = container.scrollHeight
+          setIsScrolledUp(false)
+          
+          const isAtBottom = container.scrollHeight - container.scrollTop <= container.clientHeight + 10
+          
+          if (!isAtBottom && retries < 4) {
+            scrollTimeoutRef.current = setTimeout(() => scrollToBottomWithRetries(retries + 1), 100)
+          } else {
+            setHasScrolledToLastPosition(true)
+          }
         }
-        setIsScrolledUp(false)
-      }, 150)
-      setHasScrolledToLastPosition(true)
+      }
+      
+      scrollToBottomWithRetries()
     }
   }, [allMessages, channelId, serverId, hasScrolledToLastPosition])
 
   useEffect(() => {
-    if (channelId) {
+    if (channelId !== currentChannelRef.current) {
+      currentChannelRef.current = channelId
       setHasScrolledToLastPosition(false)
       setUnreadCount(0)
       setLastReadMessageId(null)
       setOptimisticMessages([])
-      setReplyToMessage(null) // Reset reply when changing channels
+      setReplyToMessage(null) 
       previousMessagesLengthRef.current = messages.length
+      
+      if (scrollTimeoutRef.current) {
+        clearTimeout(scrollTimeoutRef.current)
+        scrollTimeoutRef.current = null
+      }
       
       const lastReadKey = `last-read-${serverId}-${channelId}`
       const savedLastRead = localStorage.getItem(lastReadKey)
@@ -89,7 +109,30 @@ export default function ChatArea({
         setLastReadMessageId(savedLastRead)
       }
     }
-  }, [channelId, serverId])
+  }, [channelId, serverId, messages.length])
+
+  useEffect(() => {
+    if (channelId && messages.length > 0 && !hasScrolledToLastPosition) {
+      const container = messagesContainerRef.current
+      if (container) {
+        setTimeout(() => {
+          if (!hasScrolledToLastPosition) {
+            container.scrollTop = container.scrollHeight
+            setIsScrolledUp(false)
+            setHasScrolledToLastPosition(true)
+          }
+        }, 50)
+      }
+    }
+  }, [messages.length, channelId, hasScrolledToLastPosition])
+
+  useEffect(() => {
+    return () => {
+      if (scrollTimeoutRef.current) {
+        clearTimeout(scrollTimeoutRef.current)
+      }
+    }
+  }, [])
 
   useEffect(() => {
     const container = messagesContainerRef.current
