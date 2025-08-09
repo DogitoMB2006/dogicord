@@ -1,7 +1,7 @@
 // Vercel API Route for sending FCM notifications
 // This replaces the client-side fcmBackendService for production
 
-import admin from 'firebase-admin'
+const admin = require('firebase-admin')
 
 // Initialize Firebase Admin SDK (only once)
 if (!admin.apps.length) {
@@ -27,7 +27,7 @@ if (!admin.apps.length) {
 const db = admin.firestore()
 const messaging = admin.messaging()
 
-export default async function handler(req, res) {
+module.exports = async function handler(req, res) {
   // Enable CORS for client requests
   res.setHeader('Access-Control-Allow-Origin', '*')
   res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS')

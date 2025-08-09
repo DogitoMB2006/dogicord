@@ -2,7 +2,7 @@
 // GET: Retrieve notification settings for a user and server
 // POST: Update notification settings
 
-import admin from 'firebase-admin'
+const admin = require('firebase-admin')
 
 // Initialize Firebase Admin SDK if not already done
 if (!admin.apps.length) {
@@ -27,7 +27,7 @@ if (!admin.apps.length) {
 
 const db = admin.firestore()
 
-export default async function handler(req, res) {
+module.exports = async function handler(req, res) {
   // Enable CORS
   res.setHeader('Access-Control-Allow-Origin', '*')
   res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS')

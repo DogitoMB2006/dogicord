@@ -17,10 +17,5 @@
     "VITE_FIREBASE_APP_ID": "709627572679:web:348575b839909fc80f29e2",
     "FIREBASE_PROJECT_ID": "chatroom-6b928",
     "FIREBASE_DATABASE_URL": "https://chatroom-6b928-default-rtdb.firebaseio.com"
-  },
-  "functions": {
-    "api/**/*.js": {
-      "runtime": "nodejs18.x"
-    }
   }
 }
