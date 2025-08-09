@@ -4,6 +4,7 @@ import { serverService } from '../../services/serverService'
 import { notificationService } from '../../services/notificationService'
 import type { Channel, Category } from '../../types/channels'
 import type { Role } from '../../types/permissions'
+import NotificationSettingsModal from './NotificationSettingsModal'
 import '../../styles/glow.css'
 
 interface ChannelSidebarProps {
@@ -39,6 +40,7 @@ export default function ChannelSidebar({
   const [showServerDropdown, setShowServerDropdown] = useState(false)
   const [userRoleColor, setUserRoleColor] = useState('#99AAB5')
   const [, setForceUpdate] = useState(0)
+  const [showNotificationSettings, setShowNotificationSettings] = useState(false)
 
   useEffect(() => {
     const unsubscribe = notificationService.subscribe(() => {
@@ -188,6 +190,20 @@ export default function ChannelSidebar({
                   Server Settings
                 </button>
               )}
+              
+              {/* Notification Settings Button */}
+              <button
+                onClick={() => {
+                  setShowNotificationSettings(true)
+                  setShowServerDropdown(false)
+                }}
+                className={`w-full px-4 py-3 md:py-2 text-left text-gray-300 hover:bg-gray-800 transition-colors flex items-center ${isMobile ? 'text-base' : 'text-sm'}`}
+              >
+                <svg className={`${isMobile ? 'w-4 h-4' : 'w-4 h-4'} mr-2`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 17h5l-5 5v-5zM12 17H7a3 3 0 01-3-3V7a3 3 0 013-3h5m0 0h5a3 3 0 013 3v3M12 4V2m0 0L10 4m2-2l2 2" />
+                </svg>
+                Notifications
+              </button>
               
               <div className="h-px bg-gray-700 my-2" />
               
@@ -377,6 +393,16 @@ export default function ChannelSidebar({
           </button>
         </div>
       </div>
+
+      {/* Notification Settings Modal */}
+      <NotificationSettingsModal
+        isOpen={showNotificationSettings}
+        onClose={() => setShowNotificationSettings(false)}
+        serverId={serverId}
+        serverName={serverName}
+        currentUserId={currentUser?.uid || ''}
+        isMobile={isMobile}
+      />
     </div>
   )
 }

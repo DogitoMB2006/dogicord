@@ -8,6 +8,7 @@ import { authService } from '../services/authService'
 import { profileService } from '../services/profileService'
 import { roleSyncService } from '../services/roleSyncService'
 import { presenceService } from '../services/presenceService'
+import { fcmService } from '../services/fcmService'
 import type { UserProfile } from '../services/authService'
 import type { Role } from '../types/permissions'
 
@@ -52,6 +53,13 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
           setUserProfile(profile)
           
           presenceService.initialize(user.uid)
+          
+          // Initialize FCM service for push notifications
+          try {
+            await fcmService.initialize(user.uid)
+          } catch (error) {
+            console.warn('Failed to initialize FCM service:', error)
+          }
         } catch (error) {
           console.error('Error loading user profile:', error)
         }
@@ -59,6 +67,7 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
         setUserProfile(null)
         roleSyncService.cleanup()
         presenceService.cleanup()
+        fcmService.cleanup()
       }
       
       setLoading(false)
@@ -68,6 +77,7 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
       unsubscribeAuth()
       roleSyncService.cleanup()
       presenceService.cleanup()
+      fcmService.cleanup()
     }
   }, [])
 
@@ -77,6 +87,13 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
     setUserProfile(profile)
     
     presenceService.initialize(user.uid)
+    
+    // Initialize FCM service for push notifications
+    try {
+      await fcmService.initialize(user.uid)
+    } catch (error) {
+      console.warn('Failed to initialize FCM service:', error)
+    }
   }
 
   const login = async (usernameOrEmail: string, password: string) => {
@@ -85,6 +102,13 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
     setUserProfile(profile)
     
     presenceService.initialize(user.uid)
+    
+    // Initialize FCM service for push notifications
+    try {
+      await fcmService.initialize(user.uid)
+    } catch (error) {
+      console.warn('Failed to initialize FCM service:', error)
+    }
   }
 
   const logout = async () => {
@@ -94,6 +118,7 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
     
     roleSyncService.cleanup()
     presenceService.cleanup()
+    fcmService.cleanup()
     await authService.logout()
     setUserProfile(null)
   }

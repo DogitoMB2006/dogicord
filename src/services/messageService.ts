@@ -204,13 +204,66 @@ class MessageService {
         messageData.replyTo = replyTo
       }
 
-      await addDoc(collection(db, 'messages'), messageData)
+      const docRef = await addDoc(collection(db, 'messages'), messageData)
 
       console.log('Message sent to Firestore successfully')
+
+      // Send FCM notifications via Vercel API
+      try {
+        const message: Message = {
+          id: docRef.id,
+          content,
+          authorId,
+          authorName,
+          authorAvatarUrl: authorAvatarUrl || undefined,
+          serverId,
+          channelId,
+          timestamp: new Date(),
+          edited: false,
+          replyTo
+        }
+        
+        // Send push notifications to server members via Vercel API
+        await this.sendNotificationViaAPI(message, server.name, channel.name)
+      } catch (notificationError) {
+        console.warn('Failed to send push notifications:', notificationError)
+        // Don't throw error here - message was sent successfully, notifications are optional
+      }
 
     } catch (error: any) {
       console.error('Error sending message:', error)
       throw new Error(error.message)
+    }
+  }
+
+  // Send notification via Vercel API
+  private async sendNotificationViaAPI(message: Message, serverName: string, channelName: string): Promise<void> {
+    try {
+      const response = await fetch('/api/send-notification', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          message,
+          serverName,
+          channelName
+        })
+      })
+
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`)
+      }
+
+      const result = await response.json()
+      if (result.success) {
+        console.log(`FCM notifications sent to ${result.totalRecipients} recipients via Vercel API`)
+      } else {
+        throw new Error(result.error || 'Failed to send notifications')
+      }
+    } catch (error) {
+      console.error('Failed to send notifications via Vercel API:', error)
+      throw error
     }
   }
 
