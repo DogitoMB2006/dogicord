@@ -1,6 +1,6 @@
 // Test API to verify Firebase Admin SDK configuration
 
-module.exports = async function handler(req, res) {
+export default async function handler(req, res) {
   // Enable CORS
   res.setHeader('Access-Control-Allow-Origin', '*')
   res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS')
@@ -52,7 +52,7 @@ module.exports = async function handler(req, res) {
     // Check firebase-admin package
     let hasFirebaseAdmin = false
     try {
-      require('firebase-admin')
+      await import('firebase-admin')
       hasFirebaseAdmin = true
     } catch (error) {
       console.error('firebase-admin not available:', error)

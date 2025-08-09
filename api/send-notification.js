@@ -1,7 +1,7 @@
 // Simplified Vercel API Route for sending FCM notifications
 // Temporary version for debugging
 
-module.exports = async function handler(req, res) {
+export default async function handler(req, res) {
   // Enable CORS for client requests
   res.setHeader('Access-Control-Allow-Origin', '*')
   res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS')
@@ -46,10 +46,11 @@ module.exports = async function handler(req, res) {
     // Check firebase-admin availability
     let admin
     try {
-      admin = require('firebase-admin')
+      admin = await import('firebase-admin')
+      admin = admin.default || admin
       console.log('firebase-admin loaded successfully')
     } catch (error) {
-      console.error('Failed to require firebase-admin:', error)
+      console.error('Failed to import firebase-admin:', error)
       return res.status(500).json({ 
         error: 'Firebase Admin SDK not available',
         details: error.message
