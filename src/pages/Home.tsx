@@ -9,6 +9,7 @@ import { notificationService } from '../services/notificationService'
 import { globalMessageListener } from '../services/globalMessageListener'
 import { useAppUpdate } from '../hooks/useAppUpdate'
 import { useReadTracker } from '../hooks/useReadTracker'
+import { fcmService } from '../services/fcmService'
 import type { Server } from '../services/serverService'
 import ServerSidebar from '../components/ui/ServerSidebar'
 import ServerModal from '../components/ui/ServerModal'
@@ -94,7 +95,47 @@ export default function Home() {
         forceCheckForUpdates,
         currentVersion,
         latestVersion,
-        isUpdateModalOpen
+        isUpdateModalOpen,
+        // FCM Debug functions
+        async fcmStatus() {
+          const status = await fcmService.getDebugInfo()
+          console.log('FCM Debug Status:', status)
+          return status
+        },
+        async testNotification() {
+          if (activeServerId && activeChannelId && currentUser && userProfile) {
+            try {
+              console.log('Sending test notification...')
+              const result = await fetch('/api/send-notification', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                  message: {
+                    id: 'test-' + Date.now(),
+                    content: 'Test notification from debug',
+                    authorId: currentUser.uid,
+                    authorName: userProfile.username,
+                    serverId: activeServerId,
+                    channelId: activeChannelId
+                  },
+                  serverName: activeServer?.name || 'Test Server',
+                  channelName: 'Test Channel'
+                })
+              })
+              const data = await result.json()
+              console.log('Test notification result:', data)
+              return data
+            } catch (error) {
+              console.error('Test notification failed:', error)
+              return { error: (error as Error).message }
+            }
+          } else {
+            console.error('Missing required data for test notification')
+            return { error: 'Missing data' }
+          }
+        },
+        currentChannel: { serverId: activeServerId, channelId: activeChannelId },
+        userInfo: { id: currentUser?.uid, username: userProfile?.username }
       }
       console.log('🔧 Debug functions available at window.dogicordDebug')
     }

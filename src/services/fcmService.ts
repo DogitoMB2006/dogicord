@@ -106,14 +106,32 @@ class FCMService {
   private async registerServiceWorker(): Promise<ServiceWorkerRegistration | undefined> {
     if ('serviceWorker' in navigator) {
       try {
-        const registration = await navigator.serviceWorker.register('/firebase-messaging-sw.js')
-        console.log('Service worker registered:', registration)
+        // First, unregister any existing service workers to avoid conflicts
+        const existingRegistrations = await navigator.serviceWorker.getRegistrations()
+        for (let registration of existingRegistrations) {
+          if (registration.scope.includes('firebase-messaging')) {
+            console.log('Unregistering old firebase service worker')
+            await registration.unregister()
+          }
+        }
+
+        const registration = await navigator.serviceWorker.register('/firebase-messaging-sw.js', {
+          scope: '/'
+        })
+        
+        // Wait for the service worker to be ready
+        await navigator.serviceWorker.ready
+        
+        console.log('✅ Service worker registered successfully:', registration)
+        console.log('SW State:', registration.active?.state)
+        
         return registration
       } catch (error) {
-        console.error('Service worker registration failed:', error)
+        console.error('❌ Service worker registration failed:', error)
         throw error
       }
     }
+    console.warn('❌ Service workers not supported')
     return undefined
   }
 
@@ -262,12 +280,17 @@ class FCMService {
     const title = payload.notification?.title || 'New message'
     const body = payload.notification?.body || 'You have a new message'
 
+    console.log('🔔 Foreground notification triggered:', { title, body, payload })
+
     // Create a toast-like notification or update UI
     if ('Notification' in window && Notification.permission === 'granted') {
       const notification = new Notification(title, {
         body,
         icon: '/vite.svg',
-        tag: 'dogicord-foreground'
+        badge: '/vite.svg',
+        tag: 'dogicord-foreground',
+        requireInteraction: false,
+        silent: false
       })
 
       // Auto close after 5 seconds
@@ -275,8 +298,20 @@ class FCMService {
 
       notification.onclick = () => {
         window.focus()
+        // Navigate to the specific channel if data is available
+        if (payload.data?.serverId && payload.data?.channelId) {
+          const url = `/?server=${payload.data.serverId}&channel=${payload.data.channelId}`
+          window.location.href = url
+        }
         notification.close()
       }
+      
+      console.log('✅ Desktop notification shown successfully')
+    } else {
+      console.warn('❌ Cannot show notification:', {
+        hasNotificationAPI: 'Notification' in window,
+        permission: Notification.permission
+      })
     }
   }
 
@@ -445,6 +480,20 @@ class FCMService {
   // Check if service is initialized
   isServiceInitialized(): boolean {
     return this.isInitialized
+  }
+
+  // Debug function to check FCM status
+  async getDebugInfo(): Promise<any> {
+    return {
+      isInitialized: this.isInitialized,
+      hasToken: !!this.currentToken,
+      token: this.currentToken ? this.currentToken.substring(0, 20) + '...' : null,
+      userId: this.userId,
+      notificationPermission: Notification.permission,
+      isSupported: await isSupported().catch(() => false),
+      serviceWorkerRegistration: !!(await navigator.serviceWorker?.getRegistration()),
+      messagingInstance: !!this.messagingInstance
+    }
   }
 }
 

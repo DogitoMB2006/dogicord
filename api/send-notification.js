@@ -58,10 +58,10 @@ export default async function handler(req, res) {
     const db = admin.firestore()
     const messaging = admin.messaging()
 
-    const { message, serverName, channelName } = req.body || {}
-    if (!message || !serverName || !channelName) {
-      return res.status(400).json({ error: 'Missing required fields' })
-    }
+      const { message, serverName, channelName, authorId } = req.body || {}
+  if (!message || !serverName || !channelName) {
+    return res.status(400).json({ error: 'Missing required fields' })
+  }
 
     // Get server members
     const serverDoc = await db.collection('servers').doc(message.serverId).get()
@@ -73,8 +73,10 @@ export default async function handler(req, res) {
       ? serverDoc.data().members
       : []
 
-    // Exclude author
+    // Exclude author and prioritize active channel users
     const recipientIds = members.filter((id) => id && id !== message.authorId)
+    
+    console.log(`Sending notifications to ${recipientIds.length} recipients for message in ${channelName}`)
 
     // Build notification body
     const isGif = typeof message.content === 'string' && (message.content.includes('.gif') || message.content.includes('giphy.com'))
