@@ -1,21 +1,30 @@
 {
   "buildCommand": "npm run build",
-  "outputDirectory": "dist",
-  "framework": "vite",
-  "rewrites": [
+  "functions": {
+    "api/version.js": {
+      "runtime": "nodejs18.x"
+    }
+  },
+  "headers": [
     {
-      "source": "/(.*)",
-      "destination": "/index.html"
+      "source": "/version.json",
+      "headers": [
+        {
+          "key": "Cache-Control",
+          "value": "no-cache, no-store, must-revalidate"
+        },
+        {
+          "key": "Pragma",
+          "value": "no-cache"
+        },
+        {
+          "key": "Expires",
+          "value": "0"
+        }
+      ]
     }
   ],
   "env": {
-    "VITE_FIREBASE_API_KEY": "AIzaSyA8KxZlAYOUDf2wT8sIsUjCUmYbaNR0tyQ",
-    "VITE_FIREBASE_AUTH_DOMAIN": "chatroom-6b928.firebaseapp.com",
-    "VITE_FIREBASE_PROJECT_ID": "chatroom-6b928",
-    "VITE_FIREBASE_STORAGE_BUCKET": "chatroom-6b928.appspot.com",
-    "VITE_FIREBASE_MESSAGING_SENDER_ID": "709627572679",
-    "VITE_FIREBASE_APP_ID": "709627572679:web:348575b839909fc80f29e2",
-    "FIREBASE_PROJECT_ID": "chatroom-6b928",
-    "FIREBASE_DATABASE_URL": "https://chatroom-6b928-default-rtdb.firebaseio.com"
+    "VERCEL_BUILD_TIME": "@vercel-build-time"
   }
 }

@@ -1,12 +1,15 @@
 {
   "version": "1.0.0",
-  "timestamp": "1754751420173",
-  "buildDate": "2025-08-09T14:57:00.173Z",
+  "timestamp": "1754752014200",
+  "buildDate": "2025-08-09T15:06:54.200Z",
   "gitCommit": "local",
   "gitBranch": "main",
   "environment": "development",
   "deploymentUrl": "localhost",
-  "deploymentId": "local-1754751420173",
-  "description": "Build 1754751420173 - 2025-08-09T14:57:00.173Z",
-  "buildNumber": 1754751420173
+  "deploymentId": "local-1754752014200",
+  "description": "Build 1754752014200 - 2025-08-09T15:06:54.200Z",
+  "buildNumber": 1754752014200,
+  "isVercel": false,
+  "vercelDeploymentId": null,
+  "lastModified": 1754752014200
 }

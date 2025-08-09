@@ -66,46 +66,77 @@ class UpdateService {
 
   private async getLatestVersion(): Promise<string> {
     try {
-      // Check if there's a new deployment by fetching version.json with cache-busting
+      // Aggressive cache-busting for Vercel
       const timestamp = Date.now()
-      const response = await fetch(`/version.json?t=${timestamp}`, {
-        cache: 'no-cache',
+      const randomParam = Math.random().toString(36).substring(7)
+      
+      const response = await fetch(`/version.json?v=${timestamp}&r=${randomParam}&cb=${Date.now()}`, {
+        cache: 'no-store',
+        method: 'GET',
         headers: {
-          'Cache-Control': 'no-cache, no-store, must-revalidate',
+          'Cache-Control': 'no-cache, no-store, must-revalidate, private',
           'Pragma': 'no-cache',
-          'Expires': '0'
+          'Expires': '0',
+          'If-Modified-Since': 'Thu, 01 Jan 1970 00:00:00 GMT',
+          'If-None-Match': '*'
         }
       })
       
       if (response.ok) {
         const versionInfo = await response.json()
         console.log('Latest version info fetched:', versionInfo)
-        return versionInfo.deploymentId || versionInfo.buildNumber || versionInfo.timestamp || '1.0.0'
+        
+        // Store the latest fetched info for comparison
+        const latestVersion = versionInfo.deploymentId || versionInfo.buildNumber || versionInfo.timestamp || '1.0.0'
+        
+        // In production, also check if this is a Vercel deployment
+        if (versionInfo.isVercel && process.env.NODE_ENV === 'production') {
+          console.log('🚀 Vercel deployment detected:', {
+            deploymentId: versionInfo.deploymentId,
+            vercelDeploymentId: versionInfo.vercelDeploymentId,
+            buildDate: versionInfo.buildDate
+          })
+        }
+        
+        return latestVersion
       } else {
-        console.warn('Failed to fetch latest version, status:', response.status)
+        console.warn('Failed to fetch latest version, status:', response.status, response.statusText)
       }
     } catch (error) {
       console.warn('Could not fetch latest version from version.json:', error)
     }
     
-    // For development, try to detect manual changes
-    if (process.env.NODE_ENV === 'development') {
-      // In development, we can simulate a new version by checking a different approach
-      const buildTime = document.querySelector('meta[name="build-time"]')?.getAttribute('content')
-      if (buildTime) {
-        console.log('Development: using build time as latest version:', buildTime)
-        return buildTime
+    // Fallback: try to fetch from API endpoint (for Vercel)
+    try {
+      console.log('🔄 Trying API fallback...')
+      const response = await fetch(`/api/version?t=${Date.now()}`, {
+        cache: 'no-store',
+        headers: { 
+          'Cache-Control': 'no-cache, no-store, must-revalidate',
+          'Pragma': 'no-cache'
+        }
+      })
+      if (response.ok) {
+        const apiVersionInfo = await response.json()
+        console.log('✅ API version info fetched:', apiVersionInfo)
+        return apiVersionInfo.deploymentId || apiVersionInfo.timestamp || 'api-fallback'
       }
+    } catch (apiError) {
+      console.log('API version check failed:', apiError instanceof Error ? apiError.message : String(apiError))
     }
     
     return this.currentVersion || '1.0.0'
   }
 
   private startPeriodicCheck(): void {
-    // Check for updates every 5 minutes
+    // Check for updates more frequently in production
+    const checkInterval = process.env.NODE_ENV === 'production' 
+      ? 2 * 60 * 1000  // 2 minutes in production
+      : 5 * 60 * 1000  // 5 minutes in development
+      
     this.checkInterval = setInterval(() => {
       this.checkForUpdates()
-    }, 5 * 60 * 1000)
+    }, checkInterval)
   }
 
   public async checkForUpdates(): Promise<boolean> {

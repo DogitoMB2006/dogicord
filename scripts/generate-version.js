@@ -14,20 +14,26 @@ function generateVersion() {
   const packageJson = JSON.parse(fs.readFileSync(path.join(__dirname, '../package.json'), 'utf8'))
   const version = packageJson.version || '1.0.0'
   
-  // Create version info object
+  // Create version info object with better Vercel support
+  const isVercel = process.env.VERCEL || process.env.VERCEL_URL
+  const vercelDeploymentId = process.env.VERCEL_GIT_COMMIT_SHA || process.env.VERCEL_DEPLOYMENT_ID
+  
   const versionInfo = {
     version,
     timestamp: timestamp.toString(),
     buildDate,
     gitCommit: process.env.VERCEL_GIT_COMMIT_SHA || 'local',
     gitBranch: process.env.VERCEL_GIT_COMMIT_REF || 'main',
-    environment: process.env.NODE_ENV || 'development',
+    environment: process.env.NODE_ENV || (isVercel ? 'production' : 'development'),
     deploymentUrl: process.env.VERCEL_URL || 'localhost',
-    deploymentId: process.env.VERCEL_GIT_COMMIT_SHA 
-      ? `${process.env.VERCEL_GIT_COMMIT_SHA.substring(0, 8)}-${timestamp}`
+    deploymentId: isVercel 
+      ? `vercel-${vercelDeploymentId ? vercelDeploymentId.substring(0, 8) : 'unknown'}-${timestamp}`
       : `local-${timestamp}`,
     description: `Build ${timestamp} - ${buildDate}`,
-    buildNumber: timestamp
+    buildNumber: timestamp,
+    isVercel: !!isVercel,
+    vercelDeploymentId: process.env.VERCEL_DEPLOYMENT_ID || null,
+    lastModified: timestamp
   }
   
   // Write to public/version.json
