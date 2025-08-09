@@ -234,6 +234,52 @@ class MessageService {
 
   private async sendNotificationViaAPI(message: Message, serverName: string, channelName: string): Promise<void> {
     try {
+      console.log('📨 Sending notification for message:', {
+        author: message.authorName,
+        content: message.content.substring(0, 50) + '...',
+        server: serverName,
+        channel: channelName,
+        isDev: import.meta.env.DEV
+      })
+
+      // Development: Simulate notification + try real API (for testing Vercel integration)
+      if (import.meta.env.DEV) {
+        // Local simulation for immediate feedback
+        setTimeout(() => {
+          this.simulateNotificationForOtherUsers(message, serverName, channelName)
+        }, 500)
+        
+        // Also try real API if available (for testing)
+        try {
+          const apiUrl = window.location.origin + '/api/send-notification'
+          console.log('🔧 [DEV] Attempting real API call to:', apiUrl)
+          
+          const response = await fetch(apiUrl, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+              message,
+              serverName,
+              channelName
+            })
+          })
+          
+          if (response.ok) {
+            const result = await response.json()
+            console.log('✅ [DEV] Real API also worked:', result)
+          } else {
+            console.log('🔧 [DEV] Real API not available (expected in local dev)')
+          }
+        } catch (apiError) {
+          console.log('🔧 [DEV] Real API not available (expected in local dev):', (apiError as Error).message)
+        }
+        
+        return
+      }
+
+      // Production: Use real Vercel API
       const response = await fetch('/api/send-notification', {
         method: 'POST',
         headers: {
@@ -252,13 +298,49 @@ class MessageService {
 
       const result = await response.json()
       if (result.success) {
-        console.log(`FCM notifications sent to ${result.totalRecipients} recipients via Vercel API`)
+        console.log(`✅ FCM notifications sent to ${result.totalRecipients} recipients via Vercel API`)
       } else {
         throw new Error(result.error || 'Failed to send notifications')
       }
     } catch (error) {
-      console.error('Failed to send notifications via Vercel API:', error)
-      throw error
+      console.error('❌ Failed to send notifications:', error)
+      
+      // In production, if API fails, don't throw - just log the error
+      if (!import.meta.env.DEV) {
+        console.warn('Notification delivery failed but message was sent successfully')
+      }
+    }
+  }
+
+  // Development helper to simulate notifications
+  private simulateNotificationForOtherUsers(message: Message, serverName: string, channelName: string): void {
+    // Only show notification if user is not in the current channel
+    const currentUrl = window.location.href
+    const isInSameChannel = currentUrl.includes(`server=${message.serverId}`) && 
+                           currentUrl.includes(`channel=${message.channelId}`)
+    
+    if (!isInSameChannel && 'Notification' in window && Notification.permission === 'granted') {
+      console.log('🔔 [DEV] Showing simulated FCM notification')
+      
+      const notification = new Notification(`#${channelName} in ${serverName}`, {
+        body: `${message.authorName}: ${message.content}`,
+        icon: '/vite.svg',
+        badge: '/vite.svg',
+        tag: 'dogicord-dev-message'
+      })
+      
+      // Auto close after 5 seconds
+      setTimeout(() => notification.close(), 5000)
+      
+      notification.onclick = () => {
+        window.focus()
+        // Navigate to the message channel
+        const url = `/?server=${message.serverId}&channel=${message.channelId}`
+        window.location.href = url
+        notification.close()
+      }
+    } else {
+      console.log('🔕 [DEV] Notification skipped (user in same channel or no permission)')
     }
   }
 

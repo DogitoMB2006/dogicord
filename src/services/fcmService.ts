@@ -151,9 +151,10 @@ class FCMService {
         })
 
         if (token) {
-          console.log('FCM token obtained:', token)
+          console.log('✅ FCM token obtained:', token.substring(0, 20) + '...')
           this.currentToken = token
           await this.saveTokenToDatabase(token)
+          console.log('✅ FCM token saved successfully')
           return // Success, exit retry loop
         } else {
           console.log('No registration token available')
@@ -265,14 +266,21 @@ class FCMService {
 
   // Setup listener for foreground messages
   private setupForegroundListener(): void {
-    if (!this.messagingInstance) return
+    if (!this.messagingInstance) {
+      console.error('❌ Cannot setup foreground listener: messaging instance not available')
+      return
+    }
 
+    console.log('🔧 Setting up FCM foreground message listener...')
+    
     onMessage(this.messagingInstance, (payload: MessagePayload) => {
-      console.log('Foreground message received:', payload)
+      console.log('🔔 FCM Foreground message received:', payload)
       
-      // Show in-app notification when app is in foreground
+      // Always show notification regardless of app state
       this.showForegroundNotification(payload)
     })
+    
+    console.log('✅ FCM foreground listener setup complete')
   }
 
   // Show notification when app is in foreground
@@ -280,15 +288,32 @@ class FCMService {
     const title = payload.notification?.title || 'New message'
     const body = payload.notification?.body || 'You have a new message'
 
-    console.log('🔔 Foreground notification triggered:', { title, body, payload })
+    console.log('🔔 FCM Foreground notification received:', { title, body })
+    console.log('📦 FCM Payload data:', payload.data)
 
-    // Create a toast-like notification or update UI
+    // Check if user is currently viewing the same channel
+    const currentUrl = window.location.href
+    const messageServerId = payload.data?.serverId
+    const messageChannelId = payload.data?.channelId
+    
+    const isInSameChannel = messageServerId && messageChannelId &&
+                           currentUrl.includes(`server=${messageServerId}`) && 
+                           currentUrl.includes(`channel=${messageChannelId}`)
+
+    if (isInSameChannel) {
+      console.log('🔕 Notification skipped - user is in the same channel')
+      return
+    }
+
+    // Create notification if user is in different channel or page is not visible
     if ('Notification' in window && Notification.permission === 'granted') {
+      console.log('🔔 Showing FCM foreground notification')
+      
       const notification = new Notification(title, {
         body,
         icon: '/vite.svg',
         badge: '/vite.svg',
-        tag: 'dogicord-foreground',
+        tag: 'dogicord-fcm-foreground',
         requireInteraction: false,
         silent: false
       })
@@ -301,14 +326,15 @@ class FCMService {
         // Navigate to the specific channel if data is available
         if (payload.data?.serverId && payload.data?.channelId) {
           const url = `/?server=${payload.data.serverId}&channel=${payload.data.channelId}`
+          console.log('🔗 Navigating to channel:', url)
           window.location.href = url
         }
         notification.close()
       }
       
-      console.log('✅ Desktop notification shown successfully')
+      console.log('✅ FCM foreground notification shown successfully')
     } else {
-      console.warn('❌ Cannot show notification:', {
+      console.warn('❌ Cannot show FCM notification:', {
         hasNotificationAPI: 'Notification' in window,
         permission: Notification.permission
       })

@@ -47,7 +47,9 @@ self.addEventListener('notificationclick', (event) => {
 
 // Handle background messages with performance optimizations
 messaging.onBackgroundMessage((payload) => {
-  console.log('[firebase-messaging-sw.js] Received background message:', payload)
+  console.log('🔔 [SW] FCM Background message received:', payload)
+  console.log('🔔 [SW] Notification data:', payload.notification)
+  console.log('🔔 [SW] Custom data:', payload.data)
   
   // Fast notification processing
   const notificationTitle = payload.notification?.title || 'Dogicord'
@@ -76,8 +78,16 @@ messaging.onBackgroundMessage((payload) => {
     }
   }
 
+  console.log('🔔 [SW] Showing notification with options:', notificationOptions)
+
   // Immediate notification display - no delays
   return self.registration.showNotification(notificationTitle, notificationOptions)
+    .then(() => {
+      console.log('✅ [SW] Background notification shown successfully')
+    })
+    .catch((error) => {
+      console.error('❌ [SW] Failed to show background notification:', error)
+    })
 })
 
 // Optimized notification click handler

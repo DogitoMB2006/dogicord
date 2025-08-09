@@ -88,8 +88,8 @@ export default function Home() {
     checkMobile()
     window.addEventListener('resize', checkMobile)
 
-    // Add debugging functions to window object
-    if (process.env.NODE_ENV === 'development') {
+    // Add debugging functions to window object (only once)
+    if (process.env.NODE_ENV === 'development' && !(window as any).dogicordDebug) {
       (window as any).dogicordDebug = {
         simulateUpdate,
         forceCheckForUpdates,
@@ -103,41 +103,137 @@ export default function Home() {
           return status
         },
         async testNotification() {
+          console.log('🧪 Testing FCM notification system...')
+          
+          // Test 1: Direct browser notification
+          if ('Notification' in window && Notification.permission === 'granted') {
+            console.log('🔔 Testing direct browser notification...')
+            const testNotif = new Notification('Test Notification', {
+              body: 'This is a test from Dogicord debug',
+              icon: '/vite.svg',
+              tag: 'dogicord-test'
+            })
+            
+            setTimeout(() => testNotif.close(), 3000)
+            console.log('✅ Direct notification sent')
+          } else {
+            console.log('❌ Notification permission not granted or not supported')
+            console.log('🔧 Current permission:', Notification.permission)
+            
+            if (Notification.permission === 'default') {
+              console.log('🔧 Requesting notification permission...')
+              const permission = await Notification.requestPermission()
+              console.log('🔧 Permission result:', permission)
+            }
+          }
+          
+          // Test 2: FCM status
+          const fcmStatus = await fcmService.getDebugInfo()
+          console.log('🔧 FCM Status:', fcmStatus)
+          
+          // Test 3: Manual FCM message simulation (development only)
+          if (import.meta.env.DEV) {
+            console.log('🧪 Development mode: Simulating FCM message...')
+            
+            // Simulate a foreground FCM message
+            const mockPayload = {
+              notification: {
+                title: `#${activeChannelId || 'test'} in ${activeServer?.name || 'Test Server'}`,
+                body: 'Debug Tester: This is a test notification from debug console'
+              },
+              data: {
+                serverId: activeServerId || 'test-server',
+                channelId: activeChannelId || 'test-channel',
+                messageId: 'test-' + Date.now(),
+                url: `/?server=${activeServerId}&channel=${activeChannelId}`
+              }
+            }
+            
+            // Trigger the foreground notification handler directly
+            try {
+              console.log('🔔 Triggering mock FCM payload:', mockPayload)
+              
+              // Show the notification using the same logic as FCM
+              if ('Notification' in window && Notification.permission === 'granted') {
+                const notification = new Notification(mockPayload.notification.title, {
+                  body: mockPayload.notification.body,
+                  icon: '/vite.svg',
+                  badge: '/vite.svg',
+                  tag: 'dogicord-test-fcm'
+                })
+                
+                setTimeout(() => notification.close(), 5000)
+                console.log('✅ Mock FCM notification displayed')
+              }
+              
+              return { success: true, payload: mockPayload, fcmStatus }
+            } catch (error) {
+              console.error('❌ Mock FCM notification failed:', error)
+              return { error: (error as Error).message, fcmStatus }
+            }
+          } else {
+            console.log('📦 Production mode: FCM notifications handled by server')
+            return { 
+              message: 'Production mode - notifications handled by server',
+              fcmStatus 
+            }
+          }
+        },
+        async checkServiceWorker() {
+          try {
+            const registrations = await navigator.serviceWorker.getRegistrations()
+            const fcmSW = registrations.find(reg => 
+              reg.scope.includes('/') && 
+              reg.active?.scriptURL.includes('firebase-messaging-sw.js')
+            )
+            
+            const status = {
+              totalRegistrations: registrations.length,
+              fcmServiceWorker: {
+                found: !!fcmSW,
+                state: fcmSW?.active?.state,
+                scope: fcmSW?.scope,
+                scriptURL: fcmSW?.active?.scriptURL
+              },
+              controller: !!navigator.serviceWorker.controller
+            }
+            
+            console.log('🔧 Service Worker Status:', status)
+            return status
+          } catch (error) {
+            console.error('❌ Service Worker check failed:', error)
+            return { error: (error as Error).message }
+          }
+        },
+        async sendTestMessage() {
           if (activeServerId && activeChannelId && currentUser && userProfile) {
             try {
-              console.log('Sending test notification...')
-              const result = await fetch('/api/send-notification', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                  message: {
-                    id: 'test-' + Date.now(),
-                    content: 'Test notification from debug',
-                    authorId: currentUser.uid,
-                    authorName: userProfile.username,
-                    serverId: activeServerId,
-                    channelId: activeChannelId
-                  },
-                  serverName: activeServer?.name || 'Test Server',
-                  channelName: 'Test Channel'
-                })
-              })
-              const data = await result.json()
-              console.log('Test notification result:', data)
-              return data
+              console.log('🧪 Sending real test message (will trigger notifications)...')
+              
+              await messageService.sendMessage(
+                'This is a test message to verify notifications are working! 🔔',
+                currentUser.uid,
+                userProfile.username,
+                (userProfile as any).avatar || null,
+                activeServerId,
+                activeChannelId
+              )
+              
+              console.log('✅ Test message sent successfully')
+              return { success: true, message: 'Test message sent' }
             } catch (error) {
-              console.error('Test notification failed:', error)
+              console.error('❌ Failed to send test message:', error)
               return { error: (error as Error).message }
             }
           } else {
-            console.error('Missing required data for test notification')
-            return { error: 'Missing data' }
+            return { error: 'Missing required data' }
           }
         },
         currentChannel: { serverId: activeServerId, channelId: activeChannelId },
         userInfo: { id: currentUser?.uid, username: userProfile?.username }
       }
       console.log('🔧 Debug functions available at window.dogicordDebug')
+      console.log('📋 Available commands: fcmStatus(), testNotification(), checkServiceWorker(), sendTestMessage()')
     }
 
     return () => window.removeEventListener('resize', checkMobile)

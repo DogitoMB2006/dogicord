@@ -2,6 +2,12 @@
 // Sends real push notifications via Firebase Admin SDK
 
 export default async function handler(req, res) {
+  console.log('🔔 FCM Notification API called:', {
+    method: req.method,
+    timestamp: new Date().toISOString(),
+    userAgent: req.headers['user-agent']?.substring(0, 100)
+  })
+
   // CORS
   res.setHeader('Access-Control-Allow-Origin', '*')
   res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS')
@@ -12,6 +18,7 @@ export default async function handler(req, res) {
   }
 
   if (req.method !== 'POST') {
+    console.log('❌ Invalid method:', req.method)
     return res.status(405).json({ error: 'Method not allowed' })
   }
 
@@ -59,7 +66,17 @@ export default async function handler(req, res) {
     const messaging = admin.messaging()
 
       const { message, serverName, channelName, authorId } = req.body || {}
+  
+  console.log('📨 Processing notification request:', {
+    hasMessage: !!message,
+    serverName,
+    channelName,
+    messageAuthor: message?.authorName,
+    messageContent: message?.content?.substring(0, 50) + '...'
+  })
+  
   if (!message || !serverName || !channelName) {
+    console.log('❌ Missing required fields:', { message: !!message, serverName, channelName })
     return res.status(400).json({ error: 'Missing required fields' })
   }
 
@@ -177,6 +194,8 @@ export default async function handler(req, res) {
       }
 
       // Use optimized sendEachForMulticast with platform-specific payloads
+      console.log(`📤 Sending FCM notifications to ${tokens.length} tokens for user ${userId}`)
+      
       const sendResp = await messaging.sendEachForMulticast({
         tokens,
         notification: {
@@ -193,6 +212,12 @@ export default async function handler(req, res) {
         webpush,
         android,
         apns
+      })
+      
+      console.log(`📊 FCM send result for user ${userId}:`, {
+        success: sendResp.successCount,
+        failure: sendResp.failureCount,
+        tokens: tokens.length
       })
 
       // Enhanced error handling with retry mechanism
@@ -269,9 +294,21 @@ export default async function handler(req, res) {
     }
 
     const totalRecipients = results.filter(r => !r.skipped).length
+    const totalSuccess = results.reduce((sum, r) => sum + (r.successCount || 0), 0)
+    const totalFailures = results.reduce((sum, r) => sum + (r.failureCount || 0), 0)
+    
+    console.log('✅ Notification processing complete:', {
+      totalRecipients,
+      totalSuccess,
+      totalFailures,
+      skipped: results.filter(r => r.skipped).length
+    })
+    
     return res.status(200).json({
       success: true,
       totalRecipients,
+      totalSuccess,
+      totalFailures,
       results
     })
   } catch (error) {
