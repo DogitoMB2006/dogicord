@@ -24,6 +24,7 @@ const firebaseConfig = {
 if (!firebaseApp) {
   firebaseApp = firebase.initializeApp(firebaseConfig)
   messaging = firebase.messaging()
+  console.log('🔥 Firebase initialized in Service Worker at:', new Date().toISOString())
 }
 
 // Ensure clicks open/focus the correct client

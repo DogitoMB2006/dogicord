@@ -195,8 +195,9 @@ export default async function handler(req, res) {
 
       // Use optimized sendEachForMulticast with platform-specific payloads
       console.log(`📤 Sending FCM notifications to ${tokens.length} tokens for user ${userId}`)
+      console.log(`📱 Tokens being used:`, tokens.map(t => t.substring(0, 20) + '...'))
       
-      const sendResp = await messaging.sendEachForMulticast({
+      const fcmPayload = {
         tokens,
         notification: {
           title: `#${channelName} in ${serverName}`,
@@ -212,12 +213,22 @@ export default async function handler(req, res) {
         webpush,
         android,
         apns
-      })
+      }
+      
+      console.log(`🔔 Complete FCM payload:`, JSON.stringify(fcmPayload, null, 2))
+      
+      const sendResp = await messaging.sendEachForMulticast(fcmPayload)
       
       console.log(`📊 FCM send result for user ${userId}:`, {
         success: sendResp.successCount,
         failure: sendResp.failureCount,
-        tokens: tokens.length
+        tokens: tokens.length,
+        responses: sendResp.responses?.map((resp, idx) => ({
+          token: tokens[idx]?.substring(0, 20) + '...',
+          success: resp.success,
+          error: resp.error?.code || null,
+          messageId: resp.messageId || null
+        }))
       })
 
       // Enhanced error handling with retry mechanism

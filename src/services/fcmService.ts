@@ -84,8 +84,42 @@ class FCMService {
           return `Permission: ${Notification.permission}`
         }
       }
+      
+      ;(window as any).checkFCMToken = async () => {
+        const currentToken = this.getCurrentToken()
+        if (!currentToken || !this.userId) {
+          return { error: 'No token or user' }
+        }
+        
+        try {
+          // Check if token exists in Firestore
+          const { collection, getDocs, query, where } = await import('firebase/firestore')
+          const { db } = await import('../config/firebase')
+          
+          const tokensRef = collection(db, 'users', this.userId, 'fcmTokens')
+          const tokensSnapshot = await getDocs(tokensRef)
+          
+          const tokenExists = tokensSnapshot.docs.some(doc => doc.data().token === currentToken)
+          
+          return {
+            hasCurrentToken: !!currentToken,
+            currentTokenPreview: currentToken.substring(0, 20) + '...',
+            tokenExistsInDB: tokenExists,
+            totalTokensInDB: tokensSnapshot.size,
+            allTokens: tokensSnapshot.docs.map(doc => ({
+              id: doc.id,
+              isActive: doc.data().isActive,
+              tokenPreview: doc.data().token?.substring(0, 20) + '...',
+              lastUsed: doc.data().lastUsed?.toDate?.() || doc.data().lastUsed
+            }))
+          }
+        } catch (error) {
+          return { error: error instanceof Error ? error.message : String(error) }
+        }
+      }
       console.log('🔧 Quick FCM status: window.fcmStatus()')
       console.log('🔧 Test notification: window.testFCMNotification()')
+      console.log('🔧 Check FCM token in DB: window.checkFCMToken()')
     } catch (error) {
       console.error('Failed to initialize FCM:', error)
       
