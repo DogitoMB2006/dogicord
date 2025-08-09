@@ -201,13 +201,62 @@ self.addEventListener('notificationclose', (event) => {
   console.log('[firebase-messaging-sw.js] Notification closed:', event)
 })
 
-// Background Sync handler for queued notifications
+// Enhanced Background Sync for PWA notifications
 self.addEventListener('sync', (event) => {
   console.log('[firebase-messaging-sw.js] Background sync triggered:', event.tag)
   
   if (event.tag === 'notification-sync') {
     event.waitUntil(processQueuedNotifications())
   }
+})
+
+// Listen for messages from main thread (for real-time notifications)
+self.addEventListener('message', (event) => {
+  console.log('[SW] Message received:', event.data)
+  
+  if (event.data && event.data.type === 'SHOW_NOTIFICATION') {
+    const { title, body, icon, url, data } = event.data.notification
+    
+    self.registration.showNotification(title, {
+      body,
+      icon: icon || '/vite.svg',
+      badge: '/vite.svg',
+      tag: 'dogicord-pwa',
+      requireInteraction: false,
+      silent: false,
+      vibrate: [200, 100, 200],
+      data: { url, ...data }
+    })
+  }
+})
+
+// Enhanced notification click handling for PWA
+self.addEventListener('notificationclick', (event) => {
+  console.log('[SW] PWA Notification click:', event)
+  
+  event.notification.close()
+  
+  const targetUrl = event.notification.data?.url || '/'
+  
+  event.waitUntil(
+    self.clients.matchAll({ type: 'window', includeUncontrolled: true })
+      .then(clients => {
+        // Check if app is already open
+        for (const client of clients) {
+          if (client.url.includes(self.registration.scope.replace('/firebase-messaging-sw.js', ''))) {
+            client.focus()
+            client.postMessage({
+              type: 'NOTIFICATION_CLICKED',
+              url: targetUrl
+            })
+            return
+          }
+        }
+        
+        // Open new window if app is not open
+        return self.clients.openWindow(targetUrl)
+      })
+  )
 })
 
 // Process queued notifications during background sync

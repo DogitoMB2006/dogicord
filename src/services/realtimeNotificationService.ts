@@ -93,7 +93,15 @@ class RealtimeNotificationService {
         return
       }
 
-      // Show browser notification
+      // Try Service Worker notification first (works in background/PWA)
+      const swNotificationSent = await this.showServiceWorkerNotification(notification)
+      
+      if (swNotificationSent) {
+        console.log('✅ Service Worker notification sent (PWA/Background compatible)')
+        return
+      }
+
+      // Fallback to browser notification (foreground only)
       if ('Notification' in window && Notification.permission === 'granted') {
         const browserNotification = new Notification(notification.title, {
           body: notification.body,
@@ -115,12 +123,43 @@ class RealtimeNotificationService {
           browserNotification.close()
         }
 
-        console.log('✅ Real-time notification shown successfully')
+        console.log('✅ Browser notification shown successfully')
       } else {
         console.warn('❌ Cannot show notification - permission not granted')
       }
     } catch (error) {
       console.error('❌ Failed to show real-time notification:', error)
+    }
+  }
+
+  private async showServiceWorkerNotification(notification: RealtimeNotification): Promise<boolean> {
+    try {
+      // Check if service worker is available
+      if (!('serviceWorker' in navigator)) {
+        return false
+      }
+
+      const registration = await navigator.serviceWorker.getRegistration()
+      if (!registration || !registration.active) {
+        return false
+      }
+
+      // Send message to service worker to show notification
+      registration.active.postMessage({
+        type: 'SHOW_NOTIFICATION',
+        notification: {
+          title: notification.title,
+          body: notification.body,
+          icon: notification.icon || '/vite.svg',
+          url: notification.url,
+          data: notification.data
+        }
+      })
+
+      return true
+    } catch (error) {
+      console.error('❌ Service Worker notification failed:', error)
+      return false
     }
   }
 

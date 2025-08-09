@@ -10,6 +10,7 @@ import { roleSyncService } from '../services/roleSyncService'
 import { presenceService } from '../services/presenceService'
 import { fcmService } from '../services/fcmService'
 import { hybridNotificationService } from '../services/hybridNotificationService'
+import '../utils/pwaInstallHelper'
 import type { UserProfile } from '../services/authService'
 import type { Role } from '../types/permissions'
 
