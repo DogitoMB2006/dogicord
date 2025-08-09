@@ -6,6 +6,17 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Dogicord</title>
     
+    <!-- OneSignal Web Push SDK -->
+    <script src="https://cdn.onesignal.com/sdks/web/v16/OneSignalSDK.page.js" defer></script>
+    <script>
+      window.OneSignalDeferred = window.OneSignalDeferred || [];
+      OneSignalDeferred.push(async function(OneSignal) {
+        await OneSignal.init({
+          appId: "f9aa53f3-b5ca-4b5e-844c-269b4c7f3713",
+        });
+      });
+    </script>
+    
     <!-- PWA Manifest -->
     <link rel="manifest" href="/manifest.json" />
     

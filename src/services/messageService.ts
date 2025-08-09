@@ -17,6 +17,7 @@ import { db } from '../config/firebase'
 import { serverService } from './serverService'
 import { permissionService } from './permissionService'
 import { notificationService } from './notificationService'
+import { hybridNotificationService } from './hybridNotificationService'
 import type { Role } from '../types/permissions'
 
 export interface Message {
@@ -221,7 +222,8 @@ class MessageService {
           replyTo
         }
         
-        await this.sendNotificationViaAPI(message, server.name, channel.name)
+        // Try new hybrid notification system first (OneSignal + FCM)
+        await this.sendHybridNotification(message, server.name, channel.name)
       } catch (notificationError) {
         console.warn('Failed to send push notifications:', notificationError)
       }
@@ -229,6 +231,55 @@ class MessageService {
     } catch (error: any) {
       console.error('Error sending message:', error)
       throw new Error(error.message)
+    }
+  }
+
+  private async sendHybridNotification(message: Message, serverName: string, channelName: string): Promise<void> {
+    try {
+      // Get server members to send notifications
+      const server = await serverService.getServer(message.serverId)
+      if (!server) return
+
+      const recipients = server.members.filter(memberId => memberId !== message.authorId)
+      
+      console.log(`📤 Sending hybrid notifications to ${recipients.length} recipients`)
+
+      // Send to each recipient using hybrid service
+      const notificationPromises = recipients.map(async (recipientId) => {
+        try {
+          const success = await hybridNotificationService.sendNotification(recipientId, {
+            title: `#${channelName} in ${serverName}`,
+            body: `${message.authorName}: ${message.content}`,
+            url: `/?server=${message.serverId}&channel=${message.channelId}`,
+            icon: '/vite.svg',
+            serverId: message.serverId,
+            channelId: message.channelId,
+            messageId: message.id
+          })
+          
+          console.log(`📱 Notification to ${recipientId}: ${success ? 'success' : 'failed'}`)
+          return success
+        } catch (error) {
+          console.error(`❌ Failed to send notification to ${recipientId}:`, error)
+          return false
+        }
+      })
+
+      const results = await Promise.allSettled(notificationPromises)
+      const successful = results.filter(r => r.status === 'fulfilled' && r.value).length
+      
+      console.log(`✅ Hybrid notifications: ${successful}/${recipients.length} successful`)
+
+      // Fallback to FCM API if hybrid completely fails
+      if (successful === 0 && recipients.length > 0) {
+        console.log('📡 Falling back to FCM API...')
+        await this.sendNotificationViaAPI(message, serverName, channelName)
+      }
+
+    } catch (error) {
+      console.error('❌ Hybrid notification failed:', error)
+      // Ultimate fallback to FCM API
+      await this.sendNotificationViaAPI(message, serverName, channelName)
     }
   }
 
@@ -300,6 +351,19 @@ class MessageService {
       if (!response.ok) {
         const errorText = await response.text()
         console.error(`❌ API Error: ${response.status} - ${errorText}`)
+        
+        // Handle quota exceeded gracefully
+        if (response.status === 500 && errorText.includes('Quota exceeded')) {
+          console.warn('⚠️ FCM quota exceeded - notifications temporarily unavailable')
+          return // Don't throw error, just log and continue
+        }
+        
+        // Handle rate limiting
+        if (response.status === 429) {
+          console.warn('⚠️ Rate limited - please wait before sending more messages')
+          return
+        }
+        
         throw new Error(`Notification API error: ${response.status} - ${errorText}`)
       }
 

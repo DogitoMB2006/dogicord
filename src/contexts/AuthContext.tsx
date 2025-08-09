@@ -9,6 +9,7 @@ import { profileService } from '../services/profileService'
 import { roleSyncService } from '../services/roleSyncService'
 import { presenceService } from '../services/presenceService'
 import { fcmService } from '../services/fcmService'
+import { hybridNotificationService } from '../services/hybridNotificationService'
 import type { UserProfile } from '../services/authService'
 import type { Role } from '../types/permissions'
 
@@ -54,11 +55,11 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
           
           presenceService.initialize(user.uid)
           
-          // Initialize FCM service for push notifications
+          // Initialize hybrid notification service (FCM + OneSignal + Browser)
           try {
-            await fcmService.initialize(user.uid)
+            await hybridNotificationService.initialize(user.uid)
           } catch (error) {
-            console.warn('Failed to initialize FCM service:', error)
+            console.warn('Failed to initialize notification service:', error)
           }
         } catch (error) {
           console.error('Error loading user profile:', error)

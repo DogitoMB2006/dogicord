@@ -8,6 +8,27 @@ export default async function handler(req, res) {
     userAgent: req.headers['user-agent']?.substring(0, 100)
   })
 
+  // Rate limiting: max 1 notification per 2 seconds per IP
+  const clientIP = req.headers['x-forwarded-for'] || req.connection?.remoteAddress || 'unknown'
+  const rateLimitKey = `rate_limit_${clientIP}`
+  const now = Date.now()
+  
+  // Simple in-memory rate limiting (for production, use Redis or similar)
+  if (!global.rateLimitCache) {
+    global.rateLimitCache = new Map()
+  }
+  
+  const lastRequest = global.rateLimitCache.get(rateLimitKey)
+  if (lastRequest && (now - lastRequest) < 2000) {
+    console.log(`⚠️ Rate limit exceeded for IP ${clientIP}`)
+    return res.status(429).json({ 
+      error: 'Rate limit exceeded', 
+      message: 'Please wait 2 seconds between notifications' 
+    })
+  }
+  
+  global.rateLimitCache.set(rateLimitKey, now)
+
   // CORS
   res.setHeader('Access-Control-Allow-Origin', '*')
   res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS')
@@ -148,11 +169,16 @@ export default async function handler(req, res) {
         continue
       }
 
-      const tokens = tokensSnap.docs.map((d) => d.data().token).filter(Boolean)
+      const allTokens = tokensSnap.docs.map((d) => d.data().token).filter(Boolean)
+      // Remove duplicates and limit to most recent 3 tokens per user
+      const tokens = [...new Set(allTokens)].slice(0, 3)
+      
       if (tokens.length === 0) {
         results.push({ userId, skipped: true, reason: 'no_tokens' })
         continue
       }
+      
+      console.log(`📱 User ${userId}: Found ${allTokens.length} tokens, using ${tokens.length} unique recent tokens`)
 
       // Optimized payload for faster delivery and better platform support
       const webpush = {
