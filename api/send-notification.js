@@ -180,7 +180,7 @@ export default async function handler(req, res) {
       // Android-specific optimizations
       const android = {
         priority: 'high',
-        ttl: '300s', // 5 minutes TTL
+        ttl: 300000, // 5 minutes TTL in milliseconds
         notification: {
           icon: '/vite.svg',
           color: '#7c3aed',
