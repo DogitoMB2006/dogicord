@@ -67,7 +67,25 @@ class FCMService {
 
       this.isInitialized = true
       this.retryCount = 0
-      console.log('FCM Service initialized successfully')
+      console.log('✅ FCM Service initialized successfully')
+      
+      // Make FCM status globally available for debugging
+      ;(window as any).fcmStatus = () => this.getSimpleStatus()
+      ;(window as any).testFCMNotification = () => {
+        if (Notification.permission === 'granted') {
+          const notification = new Notification('FCM Test', {
+            body: 'FCM service is working!',
+            icon: '/vite.svg',
+            tag: 'fcm-test'
+          })
+          setTimeout(() => notification.close(), 3000)
+          return 'Notification sent'
+        } else {
+          return `Permission: ${Notification.permission}`
+        }
+      }
+      console.log('🔧 Quick FCM status: window.fcmStatus()')
+      console.log('🔧 Test notification: window.testFCMNotification()')
     } catch (error) {
       console.error('Failed to initialize FCM:', error)
       
@@ -506,6 +524,15 @@ class FCMService {
   // Check if service is initialized
   isServiceInitialized(): boolean {
     return this.isInitialized
+  }
+
+  // Simple status check for production debugging
+  getSimpleStatus(): { initialized: boolean; hasToken: boolean; permission: string } {
+    return {
+      initialized: this.isInitialized,
+      hasToken: !!this.currentToken,
+      permission: Notification.permission
+    }
   }
 
   // Debug function to check FCM status

@@ -90,8 +90,8 @@ export default function Home() {
     checkMobile()
     window.addEventListener('resize', checkMobile)
 
-    // Add debugging functions to window object (only once)
-    if (process.env.NODE_ENV === 'development' && !(window as any).dogicordDebug) {
+    // Add debugging functions to window object (only once) - Available in dev and prod for debugging
+    if (!(window as any).dogicordDebug) {
       (window as any).dogicordDebug = {
         simulateUpdate,
         forceCheckForUpdates,
