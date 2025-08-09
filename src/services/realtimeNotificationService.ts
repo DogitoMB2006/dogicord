@@ -81,55 +81,109 @@ class RealtimeNotificationService {
     try {
       console.log('🔔 Received real-time notification:', notification.title)
 
-      // Check if user is currently viewing the related content
-      const currentUrl = window.location.href
-      const shouldSkip = notification.data?.serverId && notification.data?.channelId &&
-                        currentUrl.includes(`server=${notification.data.serverId}`) && 
-                        currentUrl.includes(`channel=${notification.data.channelId}`) &&
-                        !document.hidden && document.hasFocus()
+      // NEW LOGIC: Only skip if user is actively viewing the EXACT same channel AND window is focused
+      const shouldShow = this.shouldShowNotification(notification)
+      
+      console.log('🔍 Notification decision:', {
+        shouldShow,
+        currentUrl: window.location.href,
+        targetChannel: `${notification.data?.serverId}/${notification.data?.channelId}`,
+        windowHidden: document.hidden,
+        windowFocused: document.hasFocus()
+      })
 
-      if (shouldSkip) {
-        console.log('🔕 Notification skipped - user is actively viewing related content')
+      if (!shouldShow) {
+        console.log('🔕 Notification skipped - user is actively viewing this exact channel')
         return
       }
 
-      // Try Service Worker notification first (works in background/PWA)
+      // Always try Service Worker notification first (works in all scenarios)
       const swNotificationSent = await this.showServiceWorkerNotification(notification)
       
       if (swNotificationSent) {
-        console.log('✅ Service Worker notification sent (PWA/Background compatible)')
+        console.log('✅ Service Worker notification sent (works in background/foreground/PWA)')
         return
       }
 
-      // Fallback to browser notification (foreground only)
+      // Fallback to browser notification
       if ('Notification' in window && Notification.permission === 'granted') {
+        console.log('📤 Using browser notification as fallback')
         const browserNotification = new Notification(notification.title, {
           body: notification.body,
           icon: notification.icon || '/vite.svg',
           badge: '/vite.svg',
           tag: `realtime-${notification.id}`,
           requireInteraction: false,
-          silent: false
+          silent: false,
+          vibrate: [200, 100, 200]
         })
 
-        // Auto close after 6 seconds
-        setTimeout(() => browserNotification.close(), 6000)
+        // Auto close after 8 seconds
+        setTimeout(() => {
+          try {
+            browserNotification.close()
+          } catch (e) {
+            // Notification might already be closed
+          }
+        }, 8000)
 
         browserNotification.onclick = () => {
           window.focus()
           if (notification.url) {
             window.location.href = notification.url
           }
-          browserNotification.close()
+          try {
+            browserNotification.close()
+          } catch (e) {
+            // Notification might already be closed
+          }
         }
 
         console.log('✅ Browser notification shown successfully')
       } else {
-        console.warn('❌ Cannot show notification - permission not granted')
+        console.warn('❌ Cannot show notification - permission not granted or API not available')
       }
     } catch (error) {
       console.error('❌ Failed to show real-time notification:', error)
     }
+  }
+
+  private shouldShowNotification(notification: RealtimeNotification): boolean {
+    // Get current page info
+    const currentUrl = window.location.href
+    const urlParams = new URLSearchParams(window.location.search)
+    const currentServerId = urlParams.get('server')
+    const currentChannelId = urlParams.get('channel')
+    
+    // Check if this notification is for the current channel
+    const isCurrentChannel = notification.data?.serverId === currentServerId && 
+                            notification.data?.channelId === currentChannelId
+
+    // Page visibility states
+    const isWindowHidden = document.hidden
+    const isWindowFocused = document.hasFocus()
+    const isPageVisible = !isWindowHidden && isWindowFocused
+
+    console.log('🔍 Notification context:', {
+      isCurrentChannel,
+      isWindowHidden,
+      isWindowFocused, 
+      isPageVisible,
+      currentChannel: `${currentServerId}/${currentChannelId}`,
+      notificationChannel: `${notification.data?.serverId}/${notification.data?.channelId}`
+    })
+
+    // SHOW notification in these cases:
+    // 1. User is in a different channel (even if window is focused)
+    // 2. User is in the same channel but window is minimized/hidden
+    // 3. User is in the same channel but window is not focused
+    
+    // ONLY SKIP if: user is in the exact same channel AND page is fully visible and focused
+    if (isCurrentChannel && isPageVisible) {
+      return false // Skip - user is actively viewing this channel
+    }
+
+    return true // Show in all other cases
   }
 
   private async showServiceWorkerNotification(notification: RealtimeNotification): Promise<boolean> {

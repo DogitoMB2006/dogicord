@@ -348,33 +348,31 @@ class FCMService {
     console.log('🔔 FCM Foreground notification received:', { title, body })
     console.log('📦 FCM Payload data:', payload.data)
 
-    // Check if user is currently viewing the same channel
-    const currentUrl = window.location.href
-    const messageServerId = payload.data?.serverId
-    const messageChannelId = payload.data?.channelId
+    // Use the same logic as real-time notifications
+    const shouldShow = this.shouldShowFCMNotification(payload)
     
-    const isInSameChannel = messageServerId && messageChannelId &&
-                           currentUrl.includes(`server=${messageServerId}`) && 
-                           currentUrl.includes(`channel=${messageChannelId}`)
+    console.log('🔍 FCM Notification decision:', {
+      shouldShow,
+      currentUrl: window.location.href,
+      targetChannel: `${payload.data?.serverId}/${payload.data?.channelId}`,
+      windowHidden: document.hidden,
+      windowFocused: document.hasFocus()
+    })
 
-    // Also check if window is visible/focused
-    const isWindowVisible = !document.hidden
-    const isWindowFocused = document.hasFocus()
-
-    if (isInSameChannel && isWindowVisible && isWindowFocused) {
-      console.log('🔕 Notification skipped - user is actively viewing the same channel')
+    if (!shouldShow) {
+      console.log('🔕 FCM Notification skipped - user is actively viewing this exact channel')
       return
     }
 
-    // Create notification if user is in different channel or page is not visible/focused
+    // Create notification - user is in different channel or page is not fully visible
     if ('Notification' in window && Notification.permission === 'granted') {
-      console.log('🔔 Showing FCM foreground notification (user not actively viewing channel)')
+      console.log('🔔 Showing FCM foreground notification')
       
       const notificationOptions: NotificationOptions = {
         body,
         icon: '/vite.svg',
         badge: '/vite.svg',
-        tag: 'dogicord-fcm-foreground',
+        tag: `dogicord-fcm-${Date.now()}`, // Unique tag for each notification
         requireInteraction: false,
         silent: false
       }
@@ -386,8 +384,14 @@ class FCMService {
 
       const notification = new Notification(title, notificationOptions)
 
-      // Auto close after 6 seconds
-      setTimeout(() => notification.close(), 6000)
+      // Auto close after 8 seconds
+      setTimeout(() => {
+        try {
+          notification.close()
+        } catch (e) {
+          // Notification might already be closed
+        }
+      }, 8000)
 
       notification.onclick = () => {
         window.focus()
@@ -397,7 +401,11 @@ class FCMService {
           console.log('🔗 Navigating to channel:', url)
           window.location.href = url
         }
-        notification.close()
+        try {
+          notification.close()
+        } catch (e) {
+          // Notification might already be closed
+        }
       }
       
       console.log('✅ FCM foreground notification shown successfully')
@@ -408,6 +416,29 @@ class FCMService {
         reason: Notification.permission !== 'granted' ? 'Permission not granted' : 'API not available'
       })
     }
+  }
+
+  private shouldShowFCMNotification(payload: MessagePayload): boolean {
+    // Get current page info
+    const urlParams = new URLSearchParams(window.location.search)
+    const currentServerId = urlParams.get('server')
+    const currentChannelId = urlParams.get('channel')
+    
+    // Check if this notification is for the current channel
+    const isCurrentChannel = payload.data?.serverId === currentServerId && 
+                            payload.data?.channelId === currentChannelId
+
+    // Page visibility states
+    const isWindowHidden = document.hidden
+    const isWindowFocused = document.hasFocus()
+    const isPageVisible = !isWindowHidden && isWindowFocused
+
+    // ONLY SKIP if: user is in the exact same channel AND page is fully visible and focused
+    if (isCurrentChannel && isPageVisible) {
+      return false // Skip - user is actively viewing this channel
+    }
+
+    return true // Show in all other cases
   }
 
   // Get notification settings for a server via Vercel API

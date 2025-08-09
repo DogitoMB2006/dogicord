@@ -217,16 +217,41 @@ self.addEventListener('message', (event) => {
   if (event.data && event.data.type === 'SHOW_NOTIFICATION') {
     const { title, body, icon, url, data } = event.data.notification
     
-    self.registration.showNotification(title, {
+    // Force show notification with timestamp to ensure uniqueness
+    const notificationOptions = {
       body,
       icon: icon || '/vite.svg',
       badge: '/vite.svg',
-      tag: 'dogicord-pwa',
+      tag: `dogicord-${Date.now()}`, // Unique tag ensures multiple notifications
       requireInteraction: false,
+      renotify: true, // Always show even if tag exists
       silent: false,
       vibrate: [200, 100, 200],
-      data: { url, ...data }
-    })
+      timestamp: Date.now(),
+      actions: [
+        {
+          action: 'open',
+          title: 'Abrir',
+          icon: '/vite.svg'
+        }
+      ],
+      data: { 
+        url, 
+        timestamp: Date.now(),
+        ...data 
+      }
+    }
+    
+    console.log('[SW] Showing notification:', title, notificationOptions)
+    
+    // Always show notification
+    self.registration.showNotification(title, notificationOptions)
+      .then(() => {
+        console.log('[SW] ✅ Notification shown successfully via Service Worker')
+      })
+      .catch((error) => {
+        console.error('[SW] ❌ Failed to show notification:', error)
+      })
   }
 })
 
