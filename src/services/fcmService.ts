@@ -93,7 +93,7 @@ class FCMService {
         
         try {
           // Check if token exists in Firestore
-          const { collection, getDocs, query, where } = await import('firebase/firestore')
+          const { collection, getDocs } = await import('firebase/firestore')
           const { db } = await import('../config/firebase')
           
           const tokensRef = collection(db, 'users', this.userId, 'fcmTokens')
