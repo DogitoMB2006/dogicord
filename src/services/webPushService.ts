@@ -1,11 +1,3 @@
-interface PushSubscriptionData {
-  endpoint: string
-  keys: {
-    p256dh: string
-    auth: string
-  }
-}
-
 class WebPushService {
   private userId: string | null = null
   private subscription: PushSubscription | null = null
