@@ -1,26 +1,21 @@
-/* Mobile-specific styles for better UX */
 
-/* Smooth scrolling for mobile */
 .mobile-smooth-scroll {
   -webkit-overflow-scrolling: touch;
   scroll-behavior: smooth;
 }
 
-/* Mobile input improvements */
 .mobile-input {
   -webkit-appearance: none;
   -moz-appearance: none;
   appearance: none;
-  font-size: 16px; /* Prevents zoom on iOS */
+  font-size: 16px; 
 }
 
-/* Mobile button improvements */
 .mobile-button {
   -webkit-tap-highlight-color: transparent;
   touch-action: manipulation;
 }
 
-/* Mobile animations */
 @keyframes slideInFromBottom {
   from {
     transform: translateY(100%);
@@ -52,7 +47,6 @@
   }
 }
 
-/* Mobile-specific classes */
 .mobile-slide-in {
   animation: slideInFromBottom 0.3s ease-out;
 }
@@ -65,7 +59,6 @@
   animation: pulseGlow 2s ease-in-out infinite;
 }
 
-/* Mobile touch feedback */
 .mobile-touch-feedback {
   transition: all 0.1s ease-out;
 }
@@ -75,7 +68,6 @@
   opacity: 0.8;
 }
 
-/* Mobile message animations */
 .mobile-message-enter {
   animation: fadeInScale 0.3s ease-out;
 }
@@ -85,7 +77,6 @@
   animation: fadeInScale 0.2s ease-out;
 }
 
-/* Mobile input focus improvements */
 .mobile-input-focus {
   transition: all 0.2s ease-out;
 }
@@ -95,7 +86,6 @@
   box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.3);
 }
 
-/* Mobile button hover effects */
 .mobile-button-hover {
   transition: all 0.2s ease-out;
 }
@@ -110,7 +100,6 @@
   box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
 }
 
-/* Mobile scroll indicators */
 .mobile-scroll-indicator {
   position: absolute;
   bottom: 0;
@@ -127,7 +116,6 @@
   opacity: 1;
 }
 
-/* Mobile loading states */
 .mobile-loading {
   position: relative;
   overflow: hidden;
@@ -153,21 +141,17 @@
   }
 }
 
-/* Mobile responsive improvements */
 @media (max-width: 768px) {
-  /* Improve touch targets */
   .mobile-touch-target {
     min-height: 48px;
     min-width: 48px;
   }
   
-  /* Better spacing for mobile */
   .mobile-spacing {
     padding: 16px;
     margin: 12px;
   }
   
-  /* Mobile text sizing */
   .mobile-text-sm {
     font-size: 16px;
     line-height: 1.5;
@@ -178,7 +162,6 @@
     line-height: 1.4;
   }
   
-  /* Mobile border radius */
   .mobile-rounded {
     border-radius: 16px;
   }
@@ -187,21 +170,18 @@
     border-radius: 12px;
   }
   
-  /* Mobile navigation improvements */
   .mobile-nav-item {
     padding: 16px 12px;
     font-size: 16px;
     font-weight: 500;
   }
   
-  /* Mobile input improvements */
   .mobile-input {
     padding: 16px;
     font-size: 16px;
     border-radius: 12px;
   }
   
-  /* Mobile button improvements */
   .mobile-button {
     padding: 12px 16px;
     font-size: 16px;
@@ -209,7 +189,6 @@
   }
 }
 
-/* Mobile dark mode improvements */
 @media (prefers-color-scheme: dark) {
   .mobile-dark-bg {
     background-color: rgba(31, 41, 55, 0.95);
@@ -217,19 +196,16 @@
   }
 }
 
-/* Mobile performance optimizations */
 .mobile-performance {
   will-change: transform, opacity;
   backface-visibility: hidden;
   transform: translateZ(0);
 }
 
-/* Mobile gesture improvements */
 .mobile-gesture {
   touch-action: pan-y pinch-zoom;
 }
 
-/* Mobile accessibility improvements */
 .mobile-accessibility {
   -webkit-tap-highlight-color: transparent;
   -webkit-touch-callout: none;
@@ -242,7 +218,6 @@
   user-select: text;
 }
 
-/* Mobile navigation bar improvements */
 @media (max-width: 768px) {
   .mobile-nav-bar {
     height: 80px;

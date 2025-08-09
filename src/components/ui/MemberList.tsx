@@ -1,4 +1,3 @@
-// src/components/ui/MemberList.tsx
 import { useState, useEffect, useCallback, useMemo } from 'react'
 import { serverService } from '../../services/serverService'
 import { authService } from '../../services/authService'

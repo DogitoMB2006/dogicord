@@ -1,4 +1,3 @@
-// src/components/chat/MessageEditor.tsx
 import { useState, useRef, useEffect } from 'react'
 
 interface MessageEditorProps {

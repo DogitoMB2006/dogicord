@@ -1,4 +1,3 @@
-// src/components/server/CategoryEditor.tsx
 import { useState } from 'react'
 import type { Category, ChannelPermission, ChannelPermissionType } from '../../types/channels'
 import type { Role } from '../../types/permissions'

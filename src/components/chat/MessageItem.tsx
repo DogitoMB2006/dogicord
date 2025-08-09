@@ -1,4 +1,3 @@
-// src/components/chat/MessageItem.tsx
 import { useState, useEffect } from 'react'
 import type { Message } from '../../services/messageService'
 import { serverService } from '../../services/serverService'
@@ -111,11 +110,10 @@ export default function MessageItem({
     if (isMobile && onReply) {
       const timer = setTimeout(() => {
         setShowReplyButton(true)
-        // Vibration feedback on mobile if available
         if (navigator.vibrate) {
           navigator.vibrate(50)
         }
-      }, 500) // 500ms for long press
+      }, 500) 
       setLongPressTimer(timer)
     }
   }
@@ -174,7 +172,6 @@ export default function MessageItem({
 
   return (
     <div>
-      {/* Reply section */}
       {message.replyTo && (
         <div className="ml-8 md:ml-12 mb-1 pl-3 border-l-2 border-gray-600">
           <div className="flex items-center space-x-2 text-xs text-gray-400">
@@ -248,7 +245,6 @@ export default function MessageItem({
             
             {!isEditing && (
               <div className="ml-auto flex items-center space-x-1">
-                {/* Reply button */}
                 {onReply && showReplyButton && (
                   <button
                     onClick={handleReply}
@@ -261,7 +257,6 @@ export default function MessageItem({
                   </button>
                 )}
                 
-                {/* Message actions */}
                 {(isOwnMessage || canManageMessages) && (
                   <div className={`transition-all duration-200 ${showActions || isMobile ? 'opacity-100' : 'opacity-0'}`}>
                     <MessageActions

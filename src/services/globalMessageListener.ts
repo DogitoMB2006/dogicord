@@ -36,7 +36,6 @@ class GlobalMessageListener {
             const messageDate = data.timestamp ? (data.timestamp as Timestamp).toDate() : new Date()
             const messageTimestamp = messageDate.getTime()
 
-            // Verificar si este es un mensaje nuevo (más reciente que el último visto)
             const lastTimestamp = this.lastMessageTimestamps.get(`${serverId}-${data.channelId}`) || 0
             
             if (messageTimestamp > lastTimestamp && data.authorId !== userId) {
