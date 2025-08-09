@@ -31,10 +31,9 @@ class OneSignalService {
         throw new Error('OneSignal SDK not loaded')
       }
       
-      // Wait for OneSignal to be ready
-      await window.OneSignal.init({
-        appId: config.appId
-      })
+      // OneSignal is already initialized via the global script in index.html
+      // Just wait for it to be ready
+      await window.OneSignal.isReady()
 
       // Set external user ID for targeting
       await window.OneSignal.setExternalUserId(userId)
