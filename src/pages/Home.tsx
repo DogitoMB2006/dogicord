@@ -10,6 +10,8 @@ import { globalMessageListener } from '../services/globalMessageListener'
 import { useAppUpdate } from '../hooks/useAppUpdate'
 import { useReadTracker } from '../hooks/useReadTracker'
 import { fcmService } from '../services/fcmService'
+import { collection, getDocs } from 'firebase/firestore'
+import { db } from '../config/firebase'
 import type { Server } from '../services/serverService'
 import ServerSidebar from '../components/ui/ServerSidebar'
 import ServerModal from '../components/ui/ServerModal'
@@ -229,11 +231,58 @@ export default function Home() {
             return { error: 'Missing required data' }
           }
         },
+        async debugFCMTokens() {
+          console.log('🔍 Debugging FCM tokens and registration...')
+          
+          try {
+            const fcmStatus = await fcmService.getDebugInfo()
+            console.log('📱 Local FCM Status:', fcmStatus)
+            
+            if (currentUser) {
+              // Check tokens in Firestore
+              const tokensRef = collection(db, 'users', currentUser.uid, 'fcmTokens')
+              const tokensSnapshot = await getDocs(tokensRef)
+              
+              console.log('🔧 Firestore FCM Tokens:', {
+                totalTokens: tokensSnapshot.size,
+                tokens: tokensSnapshot.docs.map(doc => ({
+                  id: doc.id,
+                  data: {
+                    ...doc.data(),
+                    token: doc.data().token?.substring(0, 20) + '...'
+                  }
+                }))
+              })
+              
+              // Check if current browser token exists in DB
+              const currentToken = fcmService.getCurrentToken()
+              if (currentToken) {
+                const currentTokenExists = tokensSnapshot.docs.some(doc => 
+                  doc.data().token === currentToken
+                )
+                console.log('🔍 Current browser token exists in DB:', currentTokenExists)
+              }
+              
+              return {
+                fcmStatus,
+                tokensInDB: tokensSnapshot.size,
+                currentTokenInDB: currentToken ? tokensSnapshot.docs.some(doc => 
+                  doc.data().token === currentToken
+                ) : false
+              }
+            }
+            
+            return { fcmStatus, error: 'No current user' }
+          } catch (error) {
+            console.error('❌ FCM tokens debug failed:', error)
+            return { error: (error as Error).message }
+          }
+        },
         currentChannel: { serverId: activeServerId, channelId: activeChannelId },
         userInfo: { id: currentUser?.uid, username: userProfile?.username }
       }
       console.log('🔧 Debug functions available at window.dogicordDebug')
-      console.log('📋 Available commands: fcmStatus(), testNotification(), checkServiceWorker(), sendTestMessage()')
+      console.log('📋 Available commands: fcmStatus(), testNotification(), checkServiceWorker(), sendTestMessage(), debugFCMTokens()')
     }
 
     return () => window.removeEventListener('resize', checkMobile)

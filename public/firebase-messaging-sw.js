@@ -47,7 +47,8 @@ self.addEventListener('notificationclick', (event) => {
 
 // Handle background messages with performance optimizations
 messaging.onBackgroundMessage((payload) => {
-  console.log('🔔 [SW] FCM Background message received:', payload)
+  console.log('🔔 [SW] FCM Background message received at:', new Date().toISOString())
+  console.log('🔔 [SW] Full payload:', JSON.stringify(payload, null, 2))
   console.log('🔔 [SW] Notification data:', payload.notification)
   console.log('🔔 [SW] Custom data:', payload.data)
   
@@ -57,11 +58,12 @@ messaging.onBackgroundMessage((payload) => {
     body: payload.notification?.body || 'New message',
     icon: '/vite.svg',
     badge: '/vite.svg',
-    tag: 'dogicord-message',
+    tag: `dogicord-${Date.now()}`, // Unique tag to ensure all notifications show
     requireInteraction: false,
     renotify: true, // Always show even if tag exists
     silent: false, // Ensure sound/vibration
     vibrate: [200, 100, 200], // Vibration pattern for mobile
+    timestamp: Date.now(),
     actions: [
       {
         action: 'open',
@@ -80,14 +82,31 @@ messaging.onBackgroundMessage((payload) => {
 
   console.log('🔔 [SW] Showing notification with options:', notificationOptions)
 
-  // Immediate notification display - no delays
-  return self.registration.showNotification(notificationTitle, notificationOptions)
+  // Force notification display with error handling
+  const notificationPromise = self.registration.showNotification(notificationTitle, notificationOptions)
     .then(() => {
-      console.log('✅ [SW] Background notification shown successfully')
+      console.log('✅ [SW] Background notification shown successfully at:', new Date().toISOString())
+      return true
     })
     .catch((error) => {
       console.error('❌ [SW] Failed to show background notification:', error)
+      
+      // Fallback: Try with minimal options
+      return self.registration.showNotification(notificationTitle, {
+        body: notificationOptions.body,
+        icon: '/vite.svg',
+        tag: `dogicord-fallback-${Date.now()}`
+      }).then(() => {
+        console.log('✅ [SW] Fallback notification shown')
+        return true
+      }).catch((fallbackError) => {
+        console.error('❌ [SW] Even fallback notification failed:', fallbackError)
+        return false
+      })
     })
+
+  // Always return the promise to prevent SW from terminating
+  return notificationPromise
 })
 
 // Optimized notification click handler
