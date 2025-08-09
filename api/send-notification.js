@@ -218,7 +218,7 @@ export default async function handler(req, res) {
 
       // Use optimized sendEachForMulticast with platform-specific payloads
       console.log(`📤 Sending FCM notifications to ${tokens.length} tokens for user ${userId}`)
-      console.log(`📱 Tokens being used:`, tokens.map(t => t.substring(0, 20) + '...'))
+      console.log(`📱 Tokens being used:`, tokens.map((t, idx) => `${idx + 1}. ${t.substring(0, 20)}...${t.slice(-10)}`))
       
       const fcmPayload = {
         tokens,
@@ -238,7 +238,9 @@ export default async function handler(req, res) {
         apns
       }
       
-      console.log(`🔔 Complete FCM payload:`, JSON.stringify(fcmPayload, null, 2))
+      console.log(`🔔 Sending to FCM with payload title: "${fcmPayload.notification.title}"`)
+      console.log(`🔔 Payload body: "${fcmPayload.notification.body}"`)
+      console.log(`🔔 Data keys: ${Object.keys(fcmPayload.data).join(', ')}`)
       
       const sendResp = await messaging.sendEachForMulticast(fcmPayload)
       
@@ -247,12 +249,25 @@ export default async function handler(req, res) {
         failure: sendResp.failureCount,
         tokens: tokens.length,
         responses: sendResp.responses?.map((resp, idx) => ({
-          token: tokens[idx]?.substring(0, 20) + '...',
+          token: `${tokens[idx]?.substring(0, 15)}...${tokens[idx]?.slice(-8)}`,
           success: resp.success,
           error: resp.error?.code || null,
+          errorMessage: resp.error?.message || null,
           messageId: resp.messageId || null
         }))
       })
+
+      // Log detailed errors for failed tokens
+      if (sendResp.responses?.length) {
+        const failedResponses = sendResp.responses.filter(resp => !resp.success)
+        if (failedResponses.length > 0) {
+          console.error(`❌ Failed token details for user ${userId}:`)
+          failedResponses.forEach((resp, idx) => {
+            const tokenIdx = sendResp.responses.findIndex(r => r === resp)
+            console.error(`  Token ${tokenIdx + 1}: ${resp.error?.code} - ${resp.error?.message}`)
+          })
+        }
+      }
 
       // Enhanced error handling with retry mechanism
       if (sendResp.responses?.length) {

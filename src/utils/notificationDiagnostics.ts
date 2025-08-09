@@ -188,6 +188,37 @@ export const testNotification = async (): Promise<boolean> => {
   }
 }
 
+export const debugUserTokens = async (userId: string): Promise<any> => {
+  try {
+    const response = await fetch(`/api/debug-tokens?userId=${userId}`)
+    const result = await response.json()
+    
+    console.group('🔍 FCM Token Debug Results')
+    console.log(`User ID: ${userId}`)
+    console.log(`Total Tokens: ${result.totalTokens}`)
+    console.log(`Active Tokens: ${result.activeTokens}`)
+    console.log(`Valid Tokens: ${result.validTokens}`)
+    console.log(`Invalid Tokens: ${result.invalidTokens}`)
+    
+    if (result.tokens && result.tokens.length > 0) {
+      console.table(result.tokens.map(token => ({
+        Preview: token.tokenPreview,
+        Active: token.isActive,
+        Valid: token.isValid,
+        Error: token.validationError,
+        UserAgent: token.userAgent?.substring(0, 50),
+        Created: token.createdAt
+      })))
+    }
+    
+    console.groupEnd()
+    return result
+  } catch (error) {
+    console.error('Failed to debug tokens:', error)
+    return null
+  }
+}
+
 // Make functions globally available for debugging
 if (typeof window !== 'undefined') {
   (window as any).runNotificationDiagnostics = runNotificationDiagnostics;
@@ -196,5 +227,16 @@ if (typeof window !== 'undefined') {
     printDiagnostics(diagnostics)
     return diagnostics
   };
-  (window as any).testNotification = testNotification
+  (window as any).testNotification = testNotification;
+  (window as any).debugUserTokens = debugUserTokens;
+  (window as any).debugMyTokens = async () => {
+    // Try to get current user ID from auth context
+    const auth = await import('../config/firebase').then(m => m.auth)
+    if (auth.currentUser) {
+      return debugUserTokens(auth.currentUser.uid)
+    } else {
+      console.error('No user logged in')
+      return null
+    }
+  }
 }

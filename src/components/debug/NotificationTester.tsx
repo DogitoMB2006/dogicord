@@ -1,11 +1,14 @@
 import { useState } from 'react'
-import { runNotificationDiagnostics, testNotification, printDiagnostics } from '../../utils/notificationDiagnostics'
+import { runNotificationDiagnostics, testNotification, printDiagnostics, debugUserTokens } from '../../utils/notificationDiagnostics'
 import type { NotificationDiagnostics } from '../../utils/notificationDiagnostics'
+import { useAuth } from '../../contexts/AuthContext'
 
 export const NotificationTester = () => {
+  const { currentUser } = useAuth()
   const [diagnostics, setDiagnostics] = useState<NotificationDiagnostics | null>(null)
   const [loading, setLoading] = useState(false)
   const [configTest, setConfigTest] = useState<any>(null)
+  const [tokenDebug, setTokenDebug] = useState<any>(null)
 
   const runDiagnostics = async () => {
     setLoading(true)
@@ -53,6 +56,23 @@ export const NotificationTester = () => {
     }
   }
 
+  const debugTokens = async () => {
+    if (!currentUser) {
+      alert('You need to be logged in to debug tokens')
+      return
+    }
+
+    setLoading(true)
+    try {
+      const result = await debugUserTokens(currentUser.uid)
+      setTokenDebug(result)
+    } catch (error) {
+      console.error('Token debug failed:', error)
+    } finally {
+      setLoading(false)
+    }
+  }
+
   const getStatusIcon = (condition: boolean) => condition ? '✅' : '❌'
   const getStatusColor = (condition: boolean) => condition ? 'text-green-600' : 'text-red-600'
 
@@ -93,6 +113,14 @@ export const NotificationTester = () => {
             className="px-4 py-2 bg-orange-500 text-white rounded hover:bg-orange-600"
           >
             Request Permission
+          </button>
+          
+          <button
+            onClick={debugTokens}
+            disabled={loading || !currentUser}
+            className="px-4 py-2 bg-red-500 text-white rounded hover:bg-red-600 disabled:opacity-50"
+          >
+            Debug My Tokens
           </button>
         </div>
 
@@ -212,6 +240,69 @@ export const NotificationTester = () => {
           </div>
         )}
 
+        {/* Token debug results */}
+        {tokenDebug && (
+          <div className="mt-6 p-4 bg-gray-50 dark:bg-gray-700 rounded">
+            <h3 className="text-lg font-semibold mb-3 text-gray-800 dark:text-white">
+              FCM Token Debug Results
+            </h3>
+            
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">
+              <div className="text-center">
+                <div className="text-2xl font-bold text-blue-600">{tokenDebug.totalTokens}</div>
+                <div className="text-sm text-gray-600">Total Tokens</div>
+              </div>
+              <div className="text-center">
+                <div className="text-2xl font-bold text-green-600">{tokenDebug.activeTokens}</div>
+                <div className="text-sm text-gray-600">Active</div>
+              </div>
+              <div className="text-center">
+                <div className="text-2xl font-bold text-green-600">{tokenDebug.validTokens}</div>
+                <div className="text-sm text-gray-600">Valid</div>
+              </div>
+              <div className="text-center">
+                <div className="text-2xl font-bold text-red-600">{tokenDebug.invalidTokens}</div>
+                <div className="text-sm text-gray-600">Invalid</div>
+              </div>
+            </div>
+
+            {tokenDebug.tokens?.length > 0 && (
+              <div className="overflow-x-auto">
+                <table className="min-w-full text-sm">
+                  <thead>
+                    <tr className="border-b">
+                      <th className="text-left p-2">Token Preview</th>
+                      <th className="text-left p-2">Status</th>
+                      <th className="text-left p-2">Valid</th>
+                      <th className="text-left p-2">Error</th>
+                      <th className="text-left p-2">Created</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {tokenDebug.tokens.map((token: any, index: number) => (
+                      <tr key={index} className="border-b">
+                        <td className="p-2 font-mono text-xs">{token.tokenPreview}</td>
+                        <td className="p-2">
+                          <span className={`px-2 py-1 rounded text-xs ${token.isActive ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-800'}`}>
+                            {token.isActive ? 'Active' : 'Inactive'}
+                          </span>
+                        </td>
+                        <td className="p-2">
+                          {token.isValid === true && '✅ Valid'}
+                          {token.isValid === false && '❌ Invalid'}
+                          {token.isValid === null && '⏳ Not tested'}
+                        </td>
+                        <td className="p-2 text-xs text-red-600">{token.validationError || '-'}</td>
+                        <td className="p-2 text-xs">{new Date(token.createdAt).toLocaleDateString()}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+        )}
+
         {/* Quick commands */}
         <div className="mt-6 p-4 bg-blue-50 dark:bg-blue-900 rounded">
           <h3 className="text-lg font-semibold mb-3 text-blue-800 dark:text-blue-200">
@@ -221,6 +312,7 @@ export const NotificationTester = () => {
             <div>window.fcmStatus() - Quick FCM status</div>
             <div>window.testFCMNotification() - Test local notification</div>
             <div>window.checkFCMToken() - Check FCM token in database</div>
+            <div>window.debugMyTokens() - Debug all my tokens</div>
             <div>window.printNotificationDiagnostics() - Full diagnostics</div>
           </div>
         </div>

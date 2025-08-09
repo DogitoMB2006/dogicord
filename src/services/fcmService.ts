@@ -123,6 +123,7 @@ class FCMService {
       console.log('🔧 Quick FCM status: window.fcmStatus()')
       console.log('🔧 Test notification: window.testFCMNotification()')
       console.log('🔧 Check FCM token in DB: window.checkFCMToken()')
+      console.log('🔧 Debug my tokens: window.debugMyTokens()')
       console.log('🔧 Full diagnostics: window.printNotificationDiagnostics()')
     } catch (error) {
       console.error('Failed to initialize FCM:', error)
