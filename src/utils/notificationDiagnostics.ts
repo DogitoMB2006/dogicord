@@ -201,7 +201,7 @@ export const debugUserTokens = async (userId: string): Promise<any> => {
     console.log(`Invalid Tokens: ${result.invalidTokens}`)
     
     if (result.tokens && result.tokens.length > 0) {
-      console.table(result.tokens.map(token => ({
+      console.table(result.tokens.map((token: any) => ({
         Preview: token.tokenPreview,
         Active: token.isActive,
         Valid: token.isValid,
