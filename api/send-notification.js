@@ -72,7 +72,11 @@ export default async function handler(req, res) {
     serverName,
     channelName,
     messageAuthor: message?.authorName,
-    messageContent: message?.content?.substring(0, 50) + '...'
+    messageAuthorId: message?.authorId,
+    messageServerId: message?.serverId,
+    messageChannelId: message?.channelId,
+    messageContent: message?.content?.substring(0, 50) + '...',
+    fullMessage: JSON.stringify(message, null, 2)
   })
   
   if (!message || !serverName || !channelName) {
