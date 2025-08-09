@@ -145,7 +145,8 @@ class OneSignalService {
         appId: this.appId
       }
     } catch (error) {
-      return { initialized: false, error: error.message }
+      const errorMessage = error instanceof Error ? error.message : String(error)
+      return { initialized: false, error: errorMessage }
     }
   }
 
