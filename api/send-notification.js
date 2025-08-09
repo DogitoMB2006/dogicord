@@ -112,18 +112,22 @@ export default async function handler(req, res) {
         continue
       }
 
-      // Build payload with WebPush options for desktop browsers (Windows/Chrome/Edge/Firefox)
+      // Optimized payload for faster delivery and better platform support
       const webpush = {
-        headers: { Urgency: 'high' },
+        headers: { 
+          Urgency: 'high',
+          'Priority': 'high'
+        },
         notification: {
           icon: '/vite.svg',
           badge: '/vite.svg',
           requireInteraction: false,
           tag: 'dogicord-message',
           renotify: true,
+          silent: false,
+          vibrate: [200, 100, 200],
           actions: [
-            { action: 'open', title: 'Open App', icon: '/vite.svg' },
-            { action: 'close', title: 'Close', icon: '/vite.svg' }
+            { action: 'open', title: 'Open', icon: '/vite.svg' }
           ]
         },
         fcmOptions: {
@@ -131,7 +135,46 @@ export default async function handler(req, res) {
         }
       }
 
-      // Use sendEachForMulticast for reliability
+      // Android-specific optimizations
+      const android = {
+        priority: 'high',
+        ttl: '300s', // 5 minutes TTL
+        notification: {
+          icon: '/vite.svg',
+          color: '#7c3aed',
+          tag: 'dogicord-message',
+          clickAction: `/?server=${message.serverId}&channel=${message.channelId}`,
+          sound: 'default',
+          channelId: 'dogicord-messages'
+        }
+      }
+
+      // iOS-specific optimizations (via APNS)
+      const apns = {
+        headers: {
+          'apns-priority': '10',
+          'apns-expiration': Math.floor(Date.now() / 1000) + 300
+        },
+        payload: {
+          aps: {
+            alert: {
+              title: `#${channelName} in ${serverName}`,
+              body
+            },
+            sound: 'default',
+            badge: 1,
+            'mutable-content': 1,
+            'content-available': 1
+          },
+          data: {
+            serverId: String(message.serverId || ''),
+            channelId: String(message.channelId || ''),
+            messageId: String(message.id || '')
+          }
+        }
+      }
+
+      // Use optimized sendEachForMulticast with platform-specific payloads
       const sendResp = await messaging.sendEachForMulticast({
         tokens,
         notification: {
@@ -142,25 +185,82 @@ export default async function handler(req, res) {
           serverId: String(message.serverId || ''),
           channelId: String(message.channelId || ''),
           messageId: String(message.id || ''),
-          url: `/?server=${message.serverId}&channel=${message.channelId}`
+          url: `/?server=${message.serverId}&channel=${message.channelId}`,
+          timestamp: String(Date.now())
         },
-        webpush
+        webpush,
+        android,
+        apns
       })
 
-      // Deactivate invalid tokens
+      // Enhanced error handling with retry mechanism
       if (sendResp.responses?.length) {
         const batch = db.batch()
+        const failedTokens = []
+        
         sendResp.responses.forEach((resp, idx) => {
           if (!resp.success) {
             const err = resp.error?.code || ''
-            if (err.includes('registration-token-not-registered') || err.includes('invalid-registration-token')) {
-              const token = tokens[idx]
+            const token = tokens[idx]
+            
+            // Permanent failures - deactivate tokens
+            if (err.includes('registration-token-not-registered') || 
+                err.includes('invalid-registration-token') ||
+                err.includes('invalid-argument')) {
               const tokenRef = db.collection('users').doc(userId).collection('fcmTokens').doc(token)
-              batch.set(tokenRef, { isActive: false, deactivatedAt: admin.firestore.FieldValue.serverTimestamp() }, { merge: true })
+              batch.set(tokenRef, { 
+                isActive: false, 
+                deactivatedAt: admin.firestore.FieldValue.serverTimestamp(),
+                deactivationReason: err
+              }, { merge: true })
+            }
+            // Temporary failures - collect for retry
+            else if (err.includes('unavailable') || 
+                     err.includes('internal') ||
+                     err.includes('quota-exceeded')) {
+              failedTokens.push({ token, error: err })
             }
           }
         })
+        
         await batch.commit()
+
+        // Implement retry for temporary failures
+        if (failedTokens.length > 0) {
+          console.log(`Retrying ${failedTokens.length} failed notifications for user ${userId}`)
+          
+          // Retry after 2 seconds
+          setTimeout(async () => {
+            try {
+              const retryTokens = failedTokens.map(f => f.token)
+              const retryResp = await messaging.sendEachForMulticast({
+                tokens: retryTokens,
+                notification: {
+                  title: `#${channelName} in ${serverName}`,
+                  body
+                },
+                data: {
+                  serverId: String(message.serverId || ''),
+                  channelId: String(message.channelId || ''),
+                  messageId: String(message.id || ''),
+                  url: `/?server=${message.serverId}&channel=${message.channelId}`,
+                  timestamp: String(Date.now()),
+                  retry: 'true'
+                },
+                webpush,
+                android,
+                apns
+              })
+              
+              console.log(`Retry result for user ${userId}:`, {
+                success: retryResp.successCount,
+                failure: retryResp.failureCount
+              })
+            } catch (retryError) {
+              console.error(`Retry failed for user ${userId}:`, retryError)
+            }
+          }, 2000)
+        }
       }
 
       results.push({ userId, successCount: sendResp.successCount, failureCount: sendResp.failureCount })

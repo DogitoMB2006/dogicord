@@ -27,8 +27,11 @@ class FCMService {
   private userId: string | null = null
   private isInitialized = false
   private messagingInstance: any = null
+  private tokenRefreshInterval: NodeJS.Timeout | null = null
+  private retryCount = 0
+  private maxRetries = 3
 
-  // Initialize FCM service
+  // Initialize FCM service with optimizations
   async initialize(userId: string): Promise<void> {
     const supported = await isSupported().catch(() => false)
     if (!supported) {
@@ -39,29 +42,41 @@ class FCMService {
     this.userId = userId
     
     try {
-      // Request notification permission
-      const permission = await this.requestPermission()
+      // Parallel initialization for faster setup
+      const [permission, registration] = await Promise.all([
+        this.requestPermission(),
+        this.registerServiceWorker()
+      ])
+
       if (permission !== 'granted') {
         console.log('Notification permission not granted')
         return
       }
 
-      // Register service worker
-      const registration = await this.registerServiceWorker()
-
-      // Init messaging instance after SW
+      // Init messaging instance immediately
       this.messagingInstance = getMessaging(app)
 
-      // Get FCM token
-      await this.getAndSaveToken(registration)
+      // Parallel token and listener setup
+      await Promise.all([
+        this.getAndSaveToken(registration),
+        this.setupForegroundListener()
+      ])
 
-      // Listen for foreground messages
-      this.setupForegroundListener()
+      // Setup token refresh every 30 minutes
+      this.setupTokenRefresh()
 
       this.isInitialized = true
+      this.retryCount = 0
       console.log('FCM Service initialized successfully')
     } catch (error) {
       console.error('Failed to initialize FCM:', error)
+      
+      // Retry logic for initialization
+      if (this.retryCount < this.maxRetries) {
+        this.retryCount++
+        console.log(`Retrying FCM initialization (${this.retryCount}/${this.maxRetries})`)
+        setTimeout(() => this.initialize(userId), 2000 * this.retryCount)
+      }
     }
   }
 
@@ -102,76 +117,130 @@ class FCMService {
     return undefined
   }
 
-  // Get FCM token and save to database
+  // Get FCM token and save to database with retry logic
   private async getAndSaveToken(registration?: ServiceWorkerRegistration): Promise<void> {
     if (!this.messagingInstance || !this.userId) return
 
-    try {
-      const token = await getToken(this.messagingInstance, {
-        vapidKey: vapidKey,
-        serviceWorkerRegistration:
-          registration || (await navigator.serviceWorker.getRegistration()) || undefined
-      })
+    let retryAttempts = 0
+    const maxTokenRetries = 3
 
-      if (token) {
-        console.log('FCM token obtained:', token)
-        this.currentToken = token
-        await this.saveTokenToDatabase(token)
-      } else {
-        console.log('No registration token available')
+    while (retryAttempts < maxTokenRetries) {
+      try {
+        const token = await getToken(this.messagingInstance, {
+          vapidKey: vapidKey,
+          serviceWorkerRegistration:
+            registration || (await navigator.serviceWorker.getRegistration()) || undefined
+        })
+
+        if (token) {
+          console.log('FCM token obtained:', token)
+          this.currentToken = token
+          await this.saveTokenToDatabase(token)
+          return // Success, exit retry loop
+        } else {
+          console.log('No registration token available')
+          return
+        }
+      } catch (error) {
+        retryAttempts++
+        console.error(`Token retrieval attempt ${retryAttempts} failed:`, error)
+        
+        if (retryAttempts < maxTokenRetries) {
+          // Wait before retry, with exponential backoff
+          await new Promise(resolve => setTimeout(resolve, 1000 * Math.pow(2, retryAttempts)))
+        } else {
+          throw error
+        }
       }
-    } catch (error) {
-      console.error('An error occurred while retrieving token:', error)
-      throw error
     }
   }
 
-  // Save token to database via Vercel API
+  // Setup automatic token refresh
+  private setupTokenRefresh(): void {
+    // Clear existing interval
+    if (this.tokenRefreshInterval) {
+      clearInterval(this.tokenRefreshInterval)
+    }
+
+    // Refresh token every 30 minutes
+    this.tokenRefreshInterval = setInterval(async () => {
+      if (this.isInitialized && this.userId) {
+        try {
+          console.log('Refreshing FCM token...')
+          await this.getAndSaveToken()
+        } catch (error) {
+          console.error('Token refresh failed:', error)
+        }
+      }
+    }, 30 * 60 * 1000) // 30 minutes
+  }
+
+  // Save token to database via Vercel API with retry logic
   private async saveTokenToDatabase(token: string): Promise<void> {
     if (!this.userId) return
 
-    try {
-      const response = await fetch('/api/fcm-tokens', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          userId: this.userId,
-          token,
-          userAgent: navigator.userAgent
-        })
-      })
+    let retryAttempts = 0
+    const maxSaveRetries = 2
 
-      if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`)
-      }
-
-      const result = await response.json()
-      if (result.success) {
-        console.log('FCM token saved to database via Vercel API')
-      } else {
-        throw new Error(result.error || 'Failed to save token')
-      }
-    } catch (error) {
-      console.error('Failed to save token to database:', error)
-      // Fallback to direct Firestore save if API fails
+    while (retryAttempts <= maxSaveRetries) {
       try {
-        const tokenData: FCMToken = {
-          token,
-          userId: this.userId,
-          createdAt: new Date(),
-          lastUsed: new Date(),
-          userAgent: navigator.userAgent,
-          isActive: true
+        const response = await fetch('/api/fcm-tokens', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Cache-Control': 'no-cache'
+          },
+          body: JSON.stringify({
+            userId: this.userId,
+            token,
+            userAgent: navigator.userAgent,
+            timestamp: Date.now()
+          })
+        })
+
+        if (!response.ok) {
+          throw new Error(`HTTP error! status: ${response.status}`)
         }
 
-        const tokenRef = doc(db, 'users', this.userId, 'fcmTokens', token)
-        await setDoc(tokenRef, tokenData, { merge: true })
-        console.log('FCM token saved to database (fallback)')
-      } catch (fallbackError) {
-        console.error('Fallback token save also failed:', fallbackError)
-        throw fallbackError
+        const result = await response.json()
+        if (result.success) {
+          console.log('FCM token saved to database via Vercel API')
+          return // Success
+        } else {
+          throw new Error(result.error || 'Failed to save token')
+        }
+      } catch (error) {
+        retryAttempts++
+        console.error(`Token save attempt ${retryAttempts} failed:`, error)
+
+        if (retryAttempts <= maxSaveRetries) {
+          // Try fallback to direct Firestore on last attempt
+          if (retryAttempts === maxSaveRetries) {
+            try {
+              const tokenData: FCMToken = {
+                token,
+                userId: this.userId,
+                createdAt: new Date(),
+                lastUsed: new Date(),
+                userAgent: navigator.userAgent,
+                isActive: true
+              }
+
+              const tokenRef = doc(db, 'users', this.userId, 'fcmTokens', token)
+              await setDoc(tokenRef, tokenData, { merge: true })
+              console.log('FCM token saved to database (fallback)')
+              return
+            } catch (fallbackError) {
+              console.error('Fallback token save also failed:', fallbackError)
+              throw fallbackError
+            }
+          } else {
+            // Wait before retry
+            await new Promise(resolve => setTimeout(resolve, 1000))
+          }
+        } else {
+          throw error
+        }
       }
     }
   }
@@ -324,6 +393,12 @@ class FCMService {
 
   // Cleanup when user logs out
   async cleanup(): Promise<void> {
+    // Clear token refresh interval
+    if (this.tokenRefreshInterval) {
+      clearInterval(this.tokenRefreshInterval)
+      this.tokenRefreshInterval = null
+    }
+
     if (this.currentToken && this.userId) {
       try {
         // Deactivate token via Vercel API
@@ -359,6 +434,7 @@ class FCMService {
     this.currentToken = null
     this.userId = null
     this.isInitialized = false
+    this.retryCount = 0
   }
 
   // Get current token
