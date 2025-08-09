@@ -9,6 +9,8 @@ interface UpdateInfo {
   checkForUpdates: () => Promise<boolean>
   applyUpdate: () => void
   dismissUpdate: () => void
+  simulateUpdate: () => void
+  forceCheckForUpdates: () => Promise<void>
 }
 
 export const useAppUpdate = (): UpdateInfo => {
@@ -84,6 +86,14 @@ export const useAppUpdate = (): UpdateInfo => {
     setHasUpdate(false)
   }
 
+  const simulateUpdate = (): void => {
+    updateService.simulateUpdate()
+  }
+
+  const forceCheckForUpdates = async (): Promise<void> => {
+    await updateService.forceCheckForUpdates()
+  }
+
   return {
     hasUpdate,
     currentVersion: versionInfo.current,
@@ -91,6 +101,8 @@ export const useAppUpdate = (): UpdateInfo => {
     isModalOpen,
     checkForUpdates,
     applyUpdate,
-    dismissUpdate
+    dismissUpdate,
+    simulateUpdate,
+    forceCheckForUpdates
   }
 }

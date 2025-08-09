@@ -23,7 +23,11 @@ function generateVersion() {
     gitBranch: process.env.VERCEL_GIT_COMMIT_REF || 'main',
     environment: process.env.NODE_ENV || 'development',
     deploymentUrl: process.env.VERCEL_URL || 'localhost',
-    description: `Build ${timestamp} - ${buildDate}`
+    deploymentId: process.env.VERCEL_GIT_COMMIT_SHA 
+      ? `${process.env.VERCEL_GIT_COMMIT_SHA.substring(0, 8)}-${timestamp}`
+      : `local-${timestamp}`,
+    description: `Build ${timestamp} - ${buildDate}`,
+    buildNumber: timestamp
   }
   
   // Write to public/version.json

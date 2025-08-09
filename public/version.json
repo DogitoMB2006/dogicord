@@ -1,10 +1,12 @@
 {
   "version": "1.0.0",
-  "timestamp": "1754751018798",
-  "buildDate": "2025-08-09T14:50:18.798Z",
+  "timestamp": "1754751420173",
+  "buildDate": "2025-08-09T14:57:00.173Z",
   "gitCommit": "local",
   "gitBranch": "main",
   "environment": "development",
   "deploymentUrl": "localhost",
-  "description": "Build 1754751018798 - 2025-08-09T14:50:18.798Z"
+  "deploymentId": "local-1754751420173",
+  "description": "Build 1754751420173 - 2025-08-09T14:57:00.173Z",
+  "buildNumber": 1754751420173
 }

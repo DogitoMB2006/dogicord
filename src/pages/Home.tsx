@@ -41,7 +41,9 @@ export default function Home() {
     latestVersion, 
     isModalOpen: isUpdateModalOpen, 
     applyUpdate, 
-    dismissUpdate 
+    dismissUpdate,
+    simulateUpdate,
+    forceCheckForUpdates
   } = useAppUpdate()
   
   const [activeChannelId, setActiveChannelId] = useState<string>(() => {
@@ -84,8 +86,21 @@ export default function Home() {
     
     checkMobile()
     window.addEventListener('resize', checkMobile)
+
+    // Add debugging functions to window object
+    if (process.env.NODE_ENV === 'development') {
+      (window as any).dogicordDebug = {
+        simulateUpdate,
+        forceCheckForUpdates,
+        currentVersion,
+        latestVersion,
+        isUpdateModalOpen
+      }
+      console.log('🔧 Debug functions available at window.dogicordDebug')
+    }
+
     return () => window.removeEventListener('resize', checkMobile)
-  }, [])
+  }, [simulateUpdate, forceCheckForUpdates, currentVersion, latestVersion, isUpdateModalOpen])
 
   useEffect(() => {
     if (currentUser && servers.length > 0) {

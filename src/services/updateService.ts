@@ -29,38 +29,39 @@ class UpdateService {
   }
 
   private async getCurrentVersion(): Promise<string> {
+    // In development, always use a timestamp so we can test
+    if (process.env.NODE_ENV === 'development') {
+      // Store initial version in localStorage for comparison
+      const storedVersion = localStorage.getItem('dogicord-app-version')
+      if (!storedVersion) {
+        const initialVersion = Date.now().toString()
+        localStorage.setItem('dogicord-app-version', initialVersion)
+        return initialVersion
+      }
+      return storedVersion
+    }
+
     try {
       // First try to get version from a version.json file (which we'll create)
       const response = await fetch('/version.json')
       if (response.ok) {
         const versionInfo = await response.json()
-        return versionInfo.version || versionInfo.timestamp || '1.0.0'
+        console.log('Current version info:', versionInfo)
+        return versionInfo.deploymentId || versionInfo.buildNumber || versionInfo.timestamp || '1.0.0'
       }
     } catch (error) {
       console.warn('Could not fetch version from version.json:', error)
     }
     
-    try {
-      // Fallback to package.json
-      const response = await fetch('/package.json')
-      if (response.ok) {
-        const packageInfo = await response.json()
-        return packageInfo.version || '1.0.0'
-      }
-    } catch (error) {
-      console.warn('Could not fetch current version from package.json:', error)
-    }
-    
     // Fallback to build timestamp from meta tag
     const buildTime = document.querySelector('meta[name="build-time"]')?.getAttribute('content')
     if (buildTime) {
+      console.log('Using build time from meta tag:', buildTime)
       return buildTime
     }
     
     // Final fallback
-    return process.env.NODE_ENV === 'production' 
-      ? '1.0.0' 
-      : Date.now().toString()
+    return '1.0.0'
   }
 
   private async getLatestVersion(): Promise<string> {
@@ -78,30 +79,23 @@ class UpdateService {
       
       if (response.ok) {
         const versionInfo = await response.json()
-        return versionInfo.version || versionInfo.timestamp || '1.0.0'
+        console.log('Latest version info fetched:', versionInfo)
+        return versionInfo.deploymentId || versionInfo.buildNumber || versionInfo.timestamp || '1.0.0'
+      } else {
+        console.warn('Failed to fetch latest version, status:', response.status)
       }
     } catch (error) {
       console.warn('Could not fetch latest version from version.json:', error)
     }
     
-    try {
-      // Fallback to package.json
-      const timestamp = Date.now()
-      const response = await fetch(`/package.json?t=${timestamp}`, {
-        cache: 'no-cache',
-        headers: {
-          'Cache-Control': 'no-cache, no-store, must-revalidate',
-          'Pragma': 'no-cache',
-          'Expires': '0'
-        }
-      })
-      
-      if (response.ok) {
-        const packageInfo = await response.json()
-        return packageInfo.version || '1.0.0'
+    // For development, try to detect manual changes
+    if (process.env.NODE_ENV === 'development') {
+      // In development, we can simulate a new version by checking a different approach
+      const buildTime = document.querySelector('meta[name="build-time"]')?.getAttribute('content')
+      if (buildTime) {
+        console.log('Development: using build time as latest version:', buildTime)
+        return buildTime
       }
-    } catch (error) {
-      console.warn('Could not fetch latest version from package.json:', error)
     }
     
     return this.currentVersion || '1.0.0'
@@ -116,7 +110,14 @@ class UpdateService {
 
   public async checkForUpdates(): Promise<boolean> {
     try {
+      console.log('🔍 Checking for updates...')
       this.latestVersion = await this.getLatestVersion()
+      
+      console.log('Version comparison:', {
+        current: this.currentVersion,
+        latest: this.latestVersion,
+        areEqual: this.currentVersion === this.latestVersion
+      })
       
       // Check if versions are different
       const hasUpdate = this.currentVersion !== this.latestVersion
@@ -128,6 +129,10 @@ class UpdateService {
           current: this.currentVersion,
           latest: this.latestVersion
         })
+      } else if (hasUpdate && this.isUpdateAvailable) {
+        console.log('📝 Update already detected, not notifying again')
+      } else {
+        console.log('✅ No updates available')
       }
       
       return hasUpdate
@@ -179,6 +184,25 @@ class UpdateService {
       this.checkInterval = null
     }
     this.updateCallbacks.clear()
+  }
+
+  // Method to simulate an update (for testing)
+  public simulateUpdate(): void {
+    console.log('🧪 Simulating update for testing...')
+    const simulatedNewVersion = (Date.now() + 1000).toString()
+    this.latestVersion = simulatedNewVersion
+    this.isUpdateAvailable = true
+    this.notifyUpdateAvailable()
+    console.log('🎉 Simulated update triggered!', {
+      current: this.currentVersion,
+      latest: this.latestVersion
+    })
+  }
+
+  // Method for manual force check (for debugging)
+  public async forceCheckForUpdates(): Promise<void> {
+    console.log('🔧 Force checking for updates...')
+    await this.checkForUpdates()
   }
 }
 
