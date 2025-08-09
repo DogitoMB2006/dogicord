@@ -211,6 +211,12 @@ export default function Home() {
           if (activeServerId && activeChannelId && currentUser && userProfile) {
             try {
               console.log('🧪 Sending real test message (will trigger notifications)...')
+              console.log('📋 Test message context:', {
+                serverId: activeServerId,
+                channelId: activeChannelId,
+                userId: currentUser.uid,
+                username: userProfile.username
+              })
               
               await messageService.sendMessage(
                 'This is a test message to verify notifications are working! 🔔',
@@ -228,7 +234,108 @@ export default function Home() {
               return { error: (error as Error).message }
             }
           } else {
-            return { error: 'Missing required data' }
+            const missing = {
+              activeServerId: !activeServerId,
+              activeChannelId: !activeChannelId,
+              currentUser: !currentUser,
+              userProfile: !userProfile
+            }
+            console.error('❌ Missing required data for test message:', missing)
+            return { error: 'Missing required data', missing }
+          }
+        },
+        async debugFullNotificationFlow() {
+          console.log('🔍 === FULL FCM NOTIFICATION DEBUG ===')
+          
+          // 1. Check FCM service status
+          const fcmStatus = await fcmService.getDebugInfo()
+          console.log('1️⃣ FCM Service Status:', fcmStatus)
+          
+          // 2. Check current user and context
+          console.log('2️⃣ Current Context:', {
+            user: currentUser?.uid,
+            server: activeServerId,
+            channel: activeChannelId,
+            profile: userProfile?.username
+          })
+          
+          // 3. Check tokens in database
+          if (currentUser) {
+            try {
+              const { collection, getDocs } = await import('firebase/firestore')
+              const { db } = await import('../config/firebase')
+              
+              const tokensRef = collection(db, 'users', currentUser.uid, 'fcmTokens')
+              const tokensSnapshot = await getDocs(tokensRef)
+              
+              console.log('3️⃣ FCM Tokens in DB:', {
+                totalTokens: tokensSnapshot.size,
+                tokens: tokensSnapshot.docs.map(doc => ({
+                  id: doc.id,
+                  isActive: doc.data().isActive,
+                  token: doc.data().token?.substring(0, 20) + '...',
+                  userAgent: doc.data().userAgent?.substring(0, 50) + '...'
+                }))
+              })
+            } catch (error) {
+              console.error('❌ Failed to check tokens:', error)
+            }
+          }
+          
+          // 4. Check server members
+          if (activeServerId) {
+            try {
+              const server = await serverService.getServer(activeServerId)
+              if (server) {
+                console.log('4️⃣ Server Info:', {
+                  serverName: server.name,
+                  memberCount: server.members?.length || 0,
+                  members: server.members || []
+                })
+              } else {
+                console.log('4️⃣ Server not found')
+              }
+            } catch (error) {
+              console.error('❌ Failed to check server:', error)
+            }
+          }
+          
+          // 5. Test direct API call
+          try {
+            console.log('5️⃣ Testing direct API call...')
+            const testMessage = {
+              id: 'test-' + Date.now(),
+              content: 'Debug test message',
+              authorId: currentUser?.uid,
+              authorName: userProfile?.username,
+              serverId: activeServerId,
+              channelId: activeChannelId,
+              timestamp: new Date()
+            }
+            
+            console.log('📤 Sending test payload:', testMessage)
+            
+            const response = await fetch('/api/send-notification', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                message: testMessage,
+                serverName: 'Test Server',
+                channelName: 'Test Channel'
+              })
+            })
+            
+            const result = await response.json()
+            console.log('📥 API Response:', result)
+            
+            return {
+              fcmStatus,
+              apiTest: result,
+              success: response.ok
+            }
+          } catch (error) {
+            console.error('❌ API test failed:', error)
+            return { error: (error as Error).message }
           }
         },
         async debugFCMTokens() {
@@ -282,7 +389,7 @@ export default function Home() {
         userInfo: { id: currentUser?.uid, username: userProfile?.username }
       }
       console.log('🔧 Debug functions available at window.dogicordDebug')
-      console.log('📋 Available commands: fcmStatus(), testNotification(), checkServiceWorker(), sendTestMessage(), debugFCMTokens()')
+      console.log('📋 Available commands: fcmStatus(), testNotification(), checkServiceWorker(), sendTestMessage(), debugFCMTokens(), debugFullNotificationFlow()')
     }
 
     return () => window.removeEventListener('resize', checkMobile)
