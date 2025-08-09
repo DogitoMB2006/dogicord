@@ -1,5 +1,6 @@
 import { fcmService } from './fcmService'
-import { oneSignalService } from './oneSignalService'
+import { webPushService } from './webPushService'
+import { realtimeNotificationService } from './realtimeNotificationService'
 
 interface NotificationOptions {
   title: string
@@ -13,13 +14,24 @@ interface NotificationOptions {
 
 export class HybridNotificationService {
   private fcmEnabled = true
-  private oneSignalEnabled = false
+  private webPushEnabled = false
+  private realtimeEnabled = false
   private userId: string | null = null
 
   async initialize(userId: string): Promise<void> {
     this.userId = userId
 
-    // Try FCM first
+    // Initialize real-time notification listener (always works)
+    try {
+      await realtimeNotificationService.initialize(userId)
+      this.realtimeEnabled = true
+      console.log('✅ Real-time notifications initialized')
+    } catch (error) {
+      console.warn('⚠️ Real-time notifications failed:', error)
+      this.realtimeEnabled = false
+    }
+
+    // Try FCM (for when quota is available)
     try {
       await fcmService.initialize(userId)
       this.fcmEnabled = true
@@ -29,16 +41,14 @@ export class HybridNotificationService {
       this.fcmEnabled = false
     }
 
-    // Initialize OneSignal as backup
+    // Initialize Web Push as backup
     try {
-      await oneSignalService.initialize(userId, { 
-        appId: "f9aa53f3-b5ca-4b5e-844c-269b4c7f3713" 
-      })
-      this.oneSignalEnabled = true
-      console.log('✅ OneSignal initialized as backup')
+      await webPushService.initialize(userId)
+      this.webPushEnabled = true
+      console.log('✅ Web Push initialized as backup')
     } catch (error) {
-      console.warn('⚠️ OneSignal initialization failed:', error)
-      this.oneSignalEnabled = false
+      console.warn('⚠️ Web Push initialization failed:', error)
+      this.webPushEnabled = false
     }
 
     // Debug function
@@ -61,11 +71,11 @@ export class HybridNotificationService {
       }
     }
 
-    // Fallback to OneSignal if FCM failed or is disabled
-    if (!success && this.oneSignalEnabled) {
+    // Always use real-time notifications (most reliable)
+    if (this.realtimeEnabled) {
       try {
-        console.log('📤 Fallback to OneSignal notification...')
-        success = await oneSignalService.sendNotificationToUser(targetUserId, {
+        console.log('📤 Sending real-time notification...')
+        const realtimeSuccess = await webPushService.sendNotificationToUser(targetUserId, {
           title: options.title,
           body: options.body,
           url: options.url,
@@ -76,8 +86,9 @@ export class HybridNotificationService {
             messageId: options.messageId
           }
         })
+        if (realtimeSuccess) success = true
       } catch (error) {
-        console.error('❌ OneSignal notification also failed:', error)
+        console.error('❌ Real-time notification failed:', error)
       }
     }
 
@@ -118,9 +129,13 @@ export class HybridNotificationService {
         initialized: this.fcmEnabled ? fcmService.isServiceInitialized() : false,
         hasToken: this.fcmEnabled ? !!fcmService.getCurrentToken() : false
       },
-      oneSignal: {
-        enabled: this.oneSignalEnabled,
-        configured: !!import.meta.env.VITE_ONESIGNAL_APP_ID
+      webPush: {
+        enabled: this.webPushEnabled,
+        configured: true
+      },
+      realtime: {
+        enabled: this.realtimeEnabled,
+        configured: true
       },
       browserNotification: {
         supported: 'Notification' in window,
@@ -133,8 +148,11 @@ export class HybridNotificationService {
     if (this.fcmEnabled) {
       await fcmService.cleanup()
     }
-    if (this.oneSignalEnabled) {
-      await oneSignalService.cleanup()
+    if (this.webPushEnabled) {
+      await webPushService.cleanup()
+    }
+    if (this.realtimeEnabled) {
+      await realtimeNotificationService.cleanup()
     }
     this.userId = null
   }
