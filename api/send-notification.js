@@ -23,17 +23,25 @@ export default async function handler(req, res) {
   }
 
   try {
+    // Check for required environment variables
     const requiredEnvVars = [
       'FIREBASE_PROJECT_ID',
-      'FIREBASE_PRIVATE_KEY_ID',
+      'FIREBASE_PRIVATE_KEY_ID', 
       'FIREBASE_PRIVATE_KEY',
       'FIREBASE_CLIENT_EMAIL',
       'FIREBASE_CLIENT_ID'
     ]
     const missingVars = requiredEnvVars.filter(v => !process.env[v])
     if (missingVars.length > 0) {
-      return res.status(500).json({ error: 'Missing env', missingVars })
+      console.error('❌ Missing required Firebase environment variables:', missingVars)
+      return res.status(500).json({ 
+        error: 'Firebase configuration incomplete', 
+        missingVars,
+        help: 'Check your Vercel environment variables configuration'
+      })
     }
+    
+    console.log('✅ All required Firebase environment variables are present')
 
     // Import firebase-admin as ES module
     let adminMod = await import('firebase-admin')
@@ -94,10 +102,21 @@ export default async function handler(req, res) {
       ? serverDoc.data().members
       : []
 
-    // Exclude author and prioritize active channel users
+    // Exclude author from notifications
     const recipientIds = members.filter((id) => id && id !== message.authorId)
     
-    console.log(`Sending notifications to ${recipientIds.length} recipients for message in ${channelName}`)
+    if (recipientIds.length === 0) {
+      console.log('ℹ️ No recipients to notify (only author in server)')
+      return res.status(200).json({
+        success: true,
+        totalRecipients: 0,
+        totalSuccess: 0,
+        totalFailures: 0,
+        message: 'No recipients to notify'
+      })
+    }
+    
+    console.log(`📬 Sending notifications to ${recipientIds.length} recipients for message in ${channelName}`)
 
     // Build notification body
     const isGif = typeof message.content === 'string' && (message.content.includes('.gif') || message.content.includes('giphy.com'))

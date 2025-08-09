@@ -280,7 +280,10 @@ class MessageService {
       }
 
       // Production: Use real Vercel API
-      const response = await fetch('/api/send-notification', {
+      console.log('📡 Sending notification request to Vercel API...')
+      const apiUrl = '/api/send-notification'
+      
+      const response = await fetch(apiUrl, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -292,14 +295,21 @@ class MessageService {
         })
       })
 
+      console.log(`📡 API Response status: ${response.status} ${response.statusText}`)
+
       if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`)
+        const errorText = await response.text()
+        console.error(`❌ API Error: ${response.status} - ${errorText}`)
+        throw new Error(`Notification API error: ${response.status} - ${errorText}`)
       }
 
       const result = await response.json()
+      console.log('📡 API Response:', result)
+      
       if (result.success) {
-        console.log(`✅ FCM notifications sent to ${result.totalRecipients} recipients via Vercel API`)
+        console.log(`✅ FCM notifications sent to ${result.totalRecipients} recipients (${result.totalSuccess} successful, ${result.totalFailures} failed)`)
       } else {
+        console.error(`❌ Notification API returned error: ${result.error}`)
         throw new Error(result.error || 'Failed to send notifications')
       }
     } catch (error) {

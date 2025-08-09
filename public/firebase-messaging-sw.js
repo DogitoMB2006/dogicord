@@ -9,16 +9,23 @@ importScripts('https://www.gstatic.com/firebasejs/10.13.0/firebase-messaging-com
 let firebaseApp = null
 let messaging = null
 
-// Initialize Firebase in service worker with performance optimizations
-const firebaseConfig = {
-  apiKey: "AIzaSyA8KxZlAYOUDf2wT8sIsUjCUmYbaNR0tyQ",
-  authDomain: "chatroom-6b928.firebaseapp.com", 
-  databaseURL: "https://chatroom-6b928-default-rtdb.firebaseio.com",
-  projectId: "chatroom-6b928",
-  storageBucket: "chatroom-6b928.appspot.com",
-  messagingSenderId: "709627572679",
-  appId: "709627572679:web:348575b839909fc80f29e2"
+// Get Firebase config from environment or fallback to production values
+const getFirebaseConfig = () => {
+  // Try to get from fetch first, fallback to hardcoded values
+  const fallbackConfig = {
+    apiKey: "AIzaSyA8KxZlAYOUDf2wT8sIsUjCUmYbaNR0tyQ",
+    authDomain: "chatroom-6b928.firebaseapp.com", 
+    databaseURL: "https://chatroom-6b928-default-rtdb.firebaseio.com",
+    projectId: "chatroom-6b928",
+    storageBucket: "chatroom-6b928.appspot.com",
+    messagingSenderId: "709627572679",
+    appId: "709627572679:web:348575b839909fc80f29e2"
+  }
+  
+  return fallbackConfig
 }
+
+const firebaseConfig = getFirebaseConfig()
 
 // Initialize only once
 if (!firebaseApp) {
@@ -46,29 +53,32 @@ self.addEventListener('notificationclick', (event) => {
   )
 })
 
-// Handle background messages with performance optimizations
+// Handle background messages with improved error handling
 messaging.onBackgroundMessage((payload) => {
   console.log('🔔 [SW] FCM Background message received at:', new Date().toISOString())
   console.log('🔔 [SW] Full payload:', JSON.stringify(payload, null, 2))
   console.log('🔔 [SW] Notification data:', payload.notification)
   console.log('🔔 [SW] Custom data:', payload.data)
   
-  // Fast notification processing
+  // Get notification text
   const notificationTitle = payload.notification?.title || 'Dogicord'
+  const notificationBody = payload.notification?.body || 'New message'
+  
+  // Enhanced notification options for better delivery
   const notificationOptions = {
-    body: payload.notification?.body || 'New message',
+    body: notificationBody,
     icon: '/vite.svg',
     badge: '/vite.svg',
-    tag: `dogicord-${Date.now()}`, // Unique tag to ensure all notifications show
+    tag: `dogicord-${Date.now()}`,
     requireInteraction: false,
-    renotify: true, // Always show even if tag exists
-    silent: false, // Ensure sound/vibration
-    vibrate: [200, 100, 200], // Vibration pattern for mobile
+    renotify: true,
+    silent: false,
+    vibrate: [200, 100, 200],
     timestamp: Date.now(),
     actions: [
       {
         action: 'open',
-        title: 'Open',
+        title: 'Abrir',
         icon: '/vite.svg'
       }
     ],
@@ -77,37 +87,66 @@ messaging.onBackgroundMessage((payload) => {
       channelId: payload.data?.channelId,
       messageId: payload.data?.messageId,
       url: payload.data?.url || '/',
-      timestamp: Date.now()
+      timestamp: Date.now(),
+      clickAction: payload.data?.url || '/'
     }
   }
 
-  console.log('🔔 [SW] Showing notification with options:', notificationOptions)
+  console.log('🔔 [SW] Showing notification:', notificationTitle, '-', notificationBody)
 
-  // Force notification display with error handling
-  const notificationPromise = self.registration.showNotification(notificationTitle, notificationOptions)
+  // Check if we can show notifications
+  if (!self.registration) {
+    console.error('❌ [SW] No service worker registration found!')
+    return Promise.resolve(false)
+  }
+
+  // Show notification with comprehensive error handling
+  return self.registration.showNotification(notificationTitle, notificationOptions)
     .then(() => {
       console.log('✅ [SW] Background notification shown successfully at:', new Date().toISOString())
-      return true
+      
+      // Post message to all clients about successful notification
+      return self.clients.matchAll().then(clients => {
+        clients.forEach(client => {
+          client.postMessage({
+            type: 'NOTIFICATION_SHOWN',
+            payload: { title: notificationTitle, body: notificationBody }
+          })
+        })
+        return true
+      })
     })
     .catch((error) => {
       console.error('❌ [SW] Failed to show background notification:', error)
       
-      // Fallback: Try with minimal options
-      return self.registration.showNotification(notificationTitle, {
-        body: notificationOptions.body,
+      // Try simplified fallback
+      const fallbackOptions = {
+        body: notificationBody,
         icon: '/vite.svg',
-        tag: `dogicord-fallback-${Date.now()}`
-      }).then(() => {
-        console.log('✅ [SW] Fallback notification shown')
-        return true
-      }).catch((fallbackError) => {
-        console.error('❌ [SW] Even fallback notification failed:', fallbackError)
-        return false
-      })
+        tag: `dogicord-fallback-${Date.now()}`,
+        data: notificationOptions.data
+      }
+      
+      return self.registration.showNotification(notificationTitle, fallbackOptions)
+        .then(() => {
+          console.log('✅ [SW] Fallback notification shown')
+          return true
+        })
+        .catch((fallbackError) => {
+          console.error('❌ [SW] Even fallback notification failed:', fallbackError)
+          
+          // Post error to clients
+          return self.clients.matchAll().then(clients => {
+            clients.forEach(client => {
+              client.postMessage({
+                type: 'NOTIFICATION_ERROR',
+                error: fallbackError.message || 'Unknown error'
+              })
+            })
+            return false
+          })
+        })
     })
-
-  // Always return the promise to prevent SW from terminating
-  return notificationPromise
 })
 
 // Optimized notification click handler

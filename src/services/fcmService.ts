@@ -117,9 +117,13 @@ class FCMService {
           return { error: error instanceof Error ? error.message : String(error) }
         }
       }
+      // Load diagnostics helper
+      this.loadDiagnosticsHelper()
+      
       console.log('🔧 Quick FCM status: window.fcmStatus()')
       console.log('🔧 Test notification: window.testFCMNotification()')
       console.log('🔧 Check FCM token in DB: window.checkFCMToken()')
+      console.log('🔧 Full diagnostics: window.printNotificationDiagnostics()')
     } catch (error) {
       console.error('Failed to initialize FCM:', error)
       
@@ -352,26 +356,37 @@ class FCMService {
                            currentUrl.includes(`server=${messageServerId}`) && 
                            currentUrl.includes(`channel=${messageChannelId}`)
 
-    if (isInSameChannel) {
-      console.log('🔕 Notification skipped - user is in the same channel')
+    // Also check if window is visible/focused
+    const isWindowVisible = !document.hidden
+    const isWindowFocused = document.hasFocus()
+
+    if (isInSameChannel && isWindowVisible && isWindowFocused) {
+      console.log('🔕 Notification skipped - user is actively viewing the same channel')
       return
     }
 
-    // Create notification if user is in different channel or page is not visible
+    // Create notification if user is in different channel or page is not visible/focused
     if ('Notification' in window && Notification.permission === 'granted') {
-      console.log('🔔 Showing FCM foreground notification')
+      console.log('🔔 Showing FCM foreground notification (user not actively viewing channel)')
       
-      const notification = new Notification(title, {
+      const notificationOptions: NotificationOptions = {
         body,
         icon: '/vite.svg',
         badge: '/vite.svg',
         tag: 'dogicord-fcm-foreground',
         requireInteraction: false,
         silent: false
-      })
+      }
 
-      // Auto close after 5 seconds
-      setTimeout(() => notification.close(), 5000)
+      // Add vibrate if supported (mobile devices)
+      if ('vibrate' in navigator) {
+        (notificationOptions as any).vibrate = [200, 100, 200]
+      }
+
+      const notification = new Notification(title, notificationOptions)
+
+      // Auto close after 6 seconds
+      setTimeout(() => notification.close(), 6000)
 
       notification.onclick = () => {
         window.focus()
@@ -388,7 +403,8 @@ class FCMService {
     } else {
       console.warn('❌ Cannot show FCM notification:', {
         hasNotificationAPI: 'Notification' in window,
-        permission: Notification.permission
+        permission: Notification.permission,
+        reason: Notification.permission !== 'granted' ? 'Permission not granted' : 'API not available'
       })
     }
   }
@@ -566,6 +582,16 @@ class FCMService {
       initialized: this.isInitialized,
       hasToken: !!this.currentToken,
       permission: Notification.permission
+    }
+  }
+
+  // Load diagnostics helper
+  private async loadDiagnosticsHelper(): Promise<void> {
+    try {
+      await import('../utils/notificationDiagnostics')
+      console.log('🔧 Diagnostics helper loaded')
+    } catch (error) {
+      console.warn('Could not load diagnostics helper:', error)
     }
   }
 
