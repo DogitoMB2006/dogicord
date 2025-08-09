@@ -38,7 +38,8 @@ export const NotificationTester = () => {
       console.log('Firebase Config Test:', result)
     } catch (error) {
       console.error('Config test failed:', error)
-      setConfigTest({ error: error.message })
+      const errorMessage = error instanceof Error ? error.message : String(error)
+      setConfigTest({ error: errorMessage })
     } finally {
       setLoading(false)
     }
