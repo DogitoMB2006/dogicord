@@ -1,7 +1,8 @@
-import { getToken, onMessage } from 'firebase/messaging'
+import { getToken, onMessage, getMessaging, isSupported } from 'firebase/messaging'
 import type { MessagePayload } from 'firebase/messaging'
 import { doc, setDoc, getDoc } from 'firebase/firestore'
-import { messaging, vapidKey, db } from '../config/firebase'
+import app from '../config/firebase'
+import { vapidKey, db } from '../config/firebase'
 
 export interface FCMToken {
   token: string
@@ -25,10 +26,12 @@ class FCMService {
   private currentToken: string | null = null
   private userId: string | null = null
   private isInitialized = false
+  private messagingInstance: any = null
 
   // Initialize FCM service
   async initialize(userId: string): Promise<void> {
-    if (!messaging) {
+    const supported = await isSupported().catch(() => false)
+    if (!supported) {
       console.warn('FCM not supported in this browser')
       return
     }
@@ -44,10 +47,13 @@ class FCMService {
       }
 
       // Register service worker
-      await this.registerServiceWorker()
+      const registration = await this.registerServiceWorker()
+
+      // Init messaging instance after SW
+      this.messagingInstance = getMessaging(app)
 
       // Get FCM token
-      await this.getAndSaveToken()
+      await this.getAndSaveToken(registration)
 
       // Listen for foreground messages
       this.setupForegroundListener()
@@ -82,26 +88,29 @@ class FCMService {
   }
 
   // Register service worker
-  private async registerServiceWorker(): Promise<void> {
+  private async registerServiceWorker(): Promise<ServiceWorkerRegistration | undefined> {
     if ('serviceWorker' in navigator) {
       try {
         const registration = await navigator.serviceWorker.register('/firebase-messaging-sw.js')
         console.log('Service worker registered:', registration)
+        return registration
       } catch (error) {
         console.error('Service worker registration failed:', error)
         throw error
       }
     }
+    return undefined
   }
 
   // Get FCM token and save to database
-  private async getAndSaveToken(): Promise<void> {
-    if (!messaging || !this.userId) return
+  private async getAndSaveToken(registration?: ServiceWorkerRegistration): Promise<void> {
+    if (!this.messagingInstance || !this.userId) return
 
     try {
-      const token = await getToken(messaging, {
+      const token = await getToken(this.messagingInstance, {
         vapidKey: vapidKey,
-        serviceWorkerRegistration: await navigator.serviceWorker.getRegistration()
+        serviceWorkerRegistration:
+          registration || (await navigator.serviceWorker.getRegistration()) || undefined
       })
 
       if (token) {
@@ -169,9 +178,9 @@ class FCMService {
 
   // Setup listener for foreground messages
   private setupForegroundListener(): void {
-    if (!messaging) return
+    if (!this.messagingInstance) return
 
-    onMessage(messaging, (payload: MessagePayload) => {
+    onMessage(this.messagingInstance, (payload: MessagePayload) => {
       console.log('Foreground message received:', payload)
       
       // Show in-app notification when app is in foreground

@@ -2,8 +2,8 @@
 // This file handles background push notifications when the app is closed
 
 // Import Firebase scripts for service worker
-importScripts('https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js')
-importScripts('https://www.gstatic.com/firebasejs/10.7.1/firebase-messaging-compat.js')
+importScripts('https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js')
+importScripts('https://www.gstatic.com/firebasejs/10.12.2/firebase-messaging-compat.js')
 
 // Initialize Firebase in service worker
 // Using the same config as the main app
@@ -21,6 +21,25 @@ firebase.initializeApp(firebaseConfig)
 
 // Initialize messaging
 const messaging = firebase.messaging()
+
+// Ensure clicks open/focus the correct client
+self.addEventListener('notificationclick', (event) => {
+  event.notification.close()
+  const targetUrl = event.notification?.data?.url || '/'
+  event.waitUntil(
+    self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then((clientList) => {
+      for (const client of clientList) {
+        // If already open, just focus
+        if ('focus' in client) {
+          return client.focus()
+        }
+      }
+      if (self.clients.openWindow) {
+        return self.clients.openWindow(targetUrl)
+      }
+    })
+  )
+})
 
 // Handle background messages
 messaging.onBackgroundMessage((payload) => {
