@@ -108,15 +108,22 @@ class RealtimeNotificationService {
       // Fallback to browser notification
       if ('Notification' in window && Notification.permission === 'granted') {
         console.log('📤 Using browser notification as fallback')
-        const browserNotification = new Notification(notification.title, {
+        
+        const notificationOptions: NotificationOptions = {
           body: notification.body,
           icon: notification.icon || '/vite.svg',
           badge: '/vite.svg',
           tag: `realtime-${notification.id}`,
           requireInteraction: false,
-          silent: false,
-          vibrate: [200, 100, 200]
-        })
+          silent: false
+        }
+
+        // Add vibrate if supported (mobile devices)
+        if ('vibrate' in navigator) {
+          (notificationOptions as any).vibrate = [200, 100, 200]
+        }
+
+        const browserNotification = new Notification(notification.title, notificationOptions)
 
         // Auto close after 8 seconds
         setTimeout(() => {
@@ -150,7 +157,6 @@ class RealtimeNotificationService {
 
   private shouldShowNotification(notification: RealtimeNotification): boolean {
     // Get current page info
-    const currentUrl = window.location.href
     const urlParams = new URLSearchParams(window.location.search)
     const currentServerId = urlParams.get('server')
     const currentChannelId = urlParams.get('channel')
