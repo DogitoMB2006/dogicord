@@ -21,7 +21,10 @@ function App() {
 
   useEffect(() => {
     if (isExiting) {
-      setIsLoading(false)
+      const timer = setTimeout(() => {
+        setIsLoading(false)
+      }, 500)
+      return () => clearTimeout(timer)
     }
   }, [isExiting])
 

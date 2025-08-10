@@ -19,7 +19,7 @@ export default function LoadingScreen({ isExiting }: LoadingScreenProps) {
   }, [])
 
   return (
-    <div className={`fixed inset-0 bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 flex flex-col items-center justify-center z-50 transition-opacity duration-200 ease-in-out ${
+    <div className={`fixed inset-0 bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 flex flex-col items-center justify-center z-50 transition-opacity duration-500 ease-in-out ${
       isExiting ? 'opacity-0' : 'opacity-100'
     }`}>
       <div className="relative">
